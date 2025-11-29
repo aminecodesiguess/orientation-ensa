@@ -8,7 +8,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 
 # --- TA CLÉ API ---
-GROQ_API_KEY = "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"  # REMETS TA CLÉ ICI !
+# Connexion au coffre-fort Streamlit
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Orientation ENSA Tanger", page_icon="🎓")
@@ -125,4 +126,5 @@ if "vectorstore" in st.session_state:
 
 elif not uploaded_files:
     # Message d'accueil si rien n'est chargé
+
     st.info("👈 Commencez par charger vos documents PDF dans le menu à gauche.")
