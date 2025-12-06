@@ -5,6 +5,7 @@ from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
+from fpdf import FPDF # <-- NOUVEL IMPORT POUR LE PDF
 
 # --- 1. LISTE OFFICIELLE DES FILIÈRES ---
 CONSTANTE_FILIERES = """
@@ -26,7 +27,53 @@ except:
 
 st.set_page_config(page_title="Orientation ENSA Tanger", page_icon="🎓", layout="wide")
 
-# --- 3. HEADER ---
+# --- 3. FONCTION DE GÉNÉRATION PDF (NOUVEAU) ---
+def create_pdf(user_profile, ai_response):
+    class PDF(FPDF):
+        def header(self):
+            # Logo
+            if os.path.exists("logo.png"):
+                self.image("logo.png", 10, 8, 25)
+            # Titre
+            self.set_font('Arial', 'B', 15)
+            self.cell(80) # Décalage à droite
+            self.cell(30, 10, "Rapport d'Orientation - ENSA Tanger", 0, 0, 'C')
+            self.ln(30) # Saut de ligne
+
+        def footer(self):
+            self.set_y(-15)
+            self.set_font('Arial', 'I', 8)
+            self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    # Nettoyage basique des caractères non supportés par FPDF standard (Emojis, etc.)
+    def clean_text(text):
+        return text.encode('latin-1', 'replace').decode('latin-1')
+
+    # Contenu du Profil
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, clean_text("1. Votre Profil Étudiant"), ln=True)
+    pdf.set_font("Arial", size=11)
+    pdf.multi_cell(0, 10, clean_text(user_profile))
+    pdf.ln(5)
+
+    # Contenu de la Recommandation
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, clean_text("2. Recommandation de l'IA"), ln=True)
+    pdf.set_font("Arial", size=11)
+    pdf.multi_cell(0, 10, clean_text(ai_response))
+    
+    # Signature
+    pdf.ln(10)
+    pdf.set_font("Arial", 'I', 10)
+    pdf.cell(0, 10, clean_text("Document généré automatiquement par l'Assistant ENSAT."), ln=True)
+
+    return pdf.output(dest='S').encode('latin-1')
+
+# --- 4. HEADER INTERFACE ---
 col1, col2 = st.columns([1, 4])
 with col1:
     if os.path.exists("logo.png"):
@@ -39,13 +86,16 @@ with col2:
 
 st.divider()
 
-# --- 4. STATE ---
+# --- 5. STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "mode" not in st.session_state:
     st.session_state.mode = "chat"
+# Variable pour stocker le rapport PDF en mémoire
+if "last_pdf" not in st.session_state:
+    st.session_state.last_pdf = None
 
-# --- 5. DATA LOADING ---
+# --- 6. DATA LOADING ---
 @st.cache_resource(show_spinner=False)
 def initialize_vectorstore():
     folder_path = "data"
@@ -83,7 +133,7 @@ if error_msg:
     st.error(error_msg)
     st.stop()
 
-# --- 6. MENU ---
+# --- 7. MENU ---
 with st.sidebar:
     st.header("🎯 Menu Principal")
     if st.button("💬 Chat IA", use_container_width=True): st.session_state.mode = "chat"
@@ -94,11 +144,12 @@ with st.sidebar:
     st.divider()
     if st.button("🗑️ Reset"):
         st.session_state.messages = []
+        st.session_state.last_pdf = None
         st.rerun()
 
-# --- 7. LOGIQUE PRINCIPALE ---
+# --- 8. LOGIQUE PRINCIPALE ---
 
-# MODE QUIZ (PROMPT "INVISIBLE" & LOGIQUE)
+# MODE QUIZ
 if st.session_state.mode == "quiz":
     st.markdown("### 📝 Test d'Orientation (15 Questions)")
     with st.form("quiz_15"):
@@ -132,35 +183,45 @@ if st.session_state.mode == "quiz":
                 context = "\n".join([d.page_content for d in docs])
                 summary = f"Goût:{q1}, Maths:{q2}, Code:{q6}, Méca:{q9}, Elec:{q10}, Chimie:{q12}, BTP:{q13}"
                 
-                # PROMPT AMÉLIORÉ (Invisible Rules)
                 prompt = f"""
-                Tu es un Conseiller d'Orientation Expert et Bienveillant.
+                Tu es un Conseiller d'Orientation Expert.
                 {CONSTANTE_FILIERES}
                 
                 PROFIL ÉTUDIANT : {summary}
                 
-                RÈGLES LOGIQUES INTERNES (⚠️ NE JAMAIS CITER CES RÈGLES DANS LA RÉPONSE) :
-                - Code="Je déteste" ou "Moyen" -> EXCLURE GINF et CSI.
-                - Aime Méca/Logistique -> Favoriser GIND.
-                - Aime Chimie/Env -> Favoriser G2EI.
-                - Aime Elec/Auto -> Favoriser GSEA.
+                RÈGLES LOGIQUES (NE PAS CITER) :
+                - Code="Je déteste"/"Moyen" -> EXCLURE GINF/CSI.
+                - Aime Méca/Logistique -> GIND.
+                - Aime Chimie/Env -> G2EI.
+                - Aime Elec/Auto -> GSEA.
                 
-                TA MISSION :
-                Réponds directement à l'étudiant de manière naturelle et fluide.
-                Ne dis jamais "Selon la règle 1".
-                Dis plutôt : "Au vu de tes réponses...", "Comme tu sembles aimer...".
-                
-                STRUCTURE :
-                1. 👋 **Analyse** : Tes points forts.
-                2. 🏆 **La Filière Idéale** : Le nom clair.
-                3. 💡 **Pourquoi ?** : Lien entre goûts et filière.
+                Réponds naturellement : "Au vu de tes réponses...".
+                Structure: Introduction, Filière Idéale, Pourquoi.
                 """
                 
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
                 resp = llm.invoke(prompt)
-                st.success("Analyse terminée !")
-                st.markdown(resp.content)
+                
+                # Sauvegarde du message
                 st.session_state.messages.append({"role": "assistant", "content": f"**Résultat Quiz :**\n{resp.content}"})
+                
+                # Génération du PDF
+                pdf_bytes = create_pdf(f"Réponses clés: {summary}", resp.content)
+                st.session_state.last_pdf = pdf_bytes
+                st.rerun()
+
+    # Affichage du résultat et du bouton de téléchargement (hors du formulaire)
+    if st.session_state.messages and "Résultat Quiz" in st.session_state.messages[-1]["content"]:
+        st.success("Analyse terminée !")
+        st.markdown(st.session_state.messages[-1]["content"])
+        
+        if st.session_state.last_pdf:
+            st.download_button(
+                label="📄 Télécharger mon Rapport d'Orientation (PDF)",
+                data=st.session_state.last_pdf,
+                file_name="rapport_orientation_ensa.pdf",
+                mime="application/pdf"
+            )
 
 # MODE ANALYSEUR NOTES
 elif st.session_state.mode == "grades":
@@ -180,17 +241,34 @@ elif st.session_state.mode == "grades":
                 retriever = vectorstore.as_retriever()
                 docs = retriever.invoke("Filières")
                 ctx = "\n".join([d.page_content for d in docs])
+                summary = f"Maths:{m}, Phys:{p}, Info:{i}, Chimie:{ch}"
+                
                 prompt = f"""
                 Analyste ENSA. {CONSTANTE_FILIERES}.
-                Notes: Maths:{m}, Phys:{p}, Info:{i}, Chimie:{ch}.
-                Calcule score compatibilité % pour chaque filière.
-                Règle: Si Info < 12, Score GINF/CSI < 50%. Si Chimie < 10, Score G2EI < 50%.
+                Notes: {summary}.
+                Calcule score compatibilité % par filière.
+                Règle: Si Info < 12, Score GINF/CSI < 50%.
                 Tableau Markdown.
                 """
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
                 resp = llm.invoke(prompt)
-                st.markdown(resp.content)
+                
                 st.session_state.messages.append({"role": "assistant", "content": resp.content})
+                
+                # Génération PDF
+                pdf_bytes = create_pdf(f"Relevé de notes: {summary}", resp.content)
+                st.session_state.last_pdf = pdf_bytes
+                st.rerun()
+
+    if st.session_state.messages and "Tableau" in str(st.session_state.messages[-1]["content"]) or "Analyse" in str(st.session_state.messages[-1]["content"]):
+        st.markdown(st.session_state.messages[-1]["content"])
+        if st.session_state.last_pdf:
+            st.download_button(
+                label="📄 Télécharger mon Bilan de Notes (PDF)",
+                data=st.session_state.last_pdf,
+                file_name="bilan_notes_ensa.pdf",
+                mime="application/pdf"
+            )
 
 # MODE COMPARE
 elif st.session_state.mode == "compare":
