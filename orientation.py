@@ -199,7 +199,7 @@ if st.session_state.mode == "quiz":
                 Structure: Introduction, Filière Idéale, Pourquoi.
                 """
                 
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama3-8b-8192")
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
                 resp = llm.invoke(prompt)
                 
                 # Sauvegarde du message
@@ -250,7 +250,7 @@ elif st.session_state.mode == "grades":
                 Règle: Si Info < 12, Score GINF/CSI < 50%.
                 Tableau Markdown.
                 """
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama3-8b-8192")
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
                 resp = llm.invoke(prompt)
                 
                 st.session_state.messages.append({"role": "assistant", "content": resp.content})
@@ -282,7 +282,7 @@ elif st.session_state.mode == "compare":
             docs = retriever.invoke(f"{f1} {f2}")
             ctx = "\n".join([d.page_content for d in docs])
             prompt = f"Compare {f1} {f2}. Tableau Markdown. Critères: Objectif, Modules, Débouchés. Contexte: {ctx}"
-            llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama3-8b-8192")
+            llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
             resp = llm.invoke(prompt)
             st.markdown(resp.content)
             st.session_state.messages.append({"role": "assistant", "content": resp.content})
@@ -299,9 +299,7 @@ elif st.session_state.mode == "chat":
             docs = retriever.invoke(p)
             ctx = "\n".join([d.page_content for d in docs])
             prompt = f"Expert ENSA. {CONSTANTE_FILIERES}. Contexte: {ctx}. Question: {p}"
-            llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama3-8b-8192")
+            llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
             resp = llm.invoke(prompt)
             st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
-
-
