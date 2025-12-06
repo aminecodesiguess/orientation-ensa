@@ -152,3 +152,82 @@ elif st.session_state.mode == "compare":
 # MODE 3 : TEST D'ORIENTATION (15 QUESTIONS)
 # ==========================================
 elif st.session_state.mode == "quiz":
+    st.markdown("### 📝 Test d'Orientation Approfondi (15 Questions)")
+    st.caption("Prenez le temps de répondre pour une analyse précise de votre profil ingénieur.")
+
+    with st.form("quiz_15"):
+        col_q1, col_q2 = st.columns(2)
+        
+        with col_q1:
+            st.markdown("**🧠 Préférences Générales**")
+            q1 = st.radio("1. Qu'aimez-vous le plus ?", ["Concevoir (Théorie)", "Fabriquer (Pratique)", "Organiser (Management)", "Coder (Virtuel)"])
+            q2 = st.select_slider("2. Votre niveau en Mathématiques ?", ["Faible", "Moyen", "Bon", "Excellent"])
+            q3 = st.radio("3. Environnement de travail ?", ["Bureau / PC", "Terrain / Chantier", "Laboratoire", "Usine / Production"])
+            q4 = st.radio("4. Travail en équipe ?", ["Je préfère être autonome", "J'aime collaborer", "Je veux diriger l'équipe"])
+            q5 = st.radio("5. Gestion du stress ?", ["Je panique vite", "Je gère bien", "Le stress me motive"])
+
+            st.markdown("**💻 Technique & Info**")
+            q6 = st.radio("6. La programmation informatique ?", ["Je déteste", "Ça m'intéresse un peu", "J'adore ça"])
+            q7 = st.radio("7. L'Intelligence Artificielle & Big Data ?", ["Pas mon truc", "Curieux", "Je veux en faire mon métier"])
+            q8 = st.radio("8. Les réseaux & Télécoms (5G, IoT) ?", ["Bof", "Intéressant", "Passionnant"])
+
+        with col_q2:
+            st.markdown("**⚙️ Industriel & Sciences**")
+            q9 = st.radio("9. La mécanique et les machines ?", ["Ennuyeux", "Utile", "Fascinant"])
+            q10 = st.radio("10. L'électricité et l'électronique ?", ["Trop complexe", "Ça va", "J'aime bricoler/comprendre"])
+            q11 = st.radio("11. La logistique (Supply Chain) ?", ["Pas intéressé", "Pourquoi pas", "C'est stratégique pour moi"])
+            q12 = st.radio("12. Chimie & Environnement ?", ["Je fuis", "Neutre", "C'est l'avenir (Énergie/Eau)"])
+            
+            st.markdown("**🚀 Projection**")
+            q13 = st.radio("13. Secteur BTP / Génie Civil ?", ["Non", "Peut-être", "Oui, bâtir des villes"])
+            q14 = st.select_slider("14. Importance du salaire vs Passion ?", ["Passion 100%", "Équilibré", "Salaire 100%"])
+            q15 = st.text_input("15. En un mot, votre rêve ?", placeholder="Ex: Data Scientist, Chef de Projet, Directeur...")
+
+        submitted = st.form_submit_button("🎓 Analyser mon Profil (Expert)")
+
+        if submitted:
+            with st.spinner("L'IA analyse vos 15 réponses et croise avec les filières ENSAT..."):
+                retriever = vectorstore.as_retriever()
+                docs = retriever.invoke("Liste détaillée filières génie info indus civil eco telecom")
+                context = "\n".join([d.page_content for d in docs])
+                
+                summary = f"""
+                R1(Goût): {q1}, R2(Maths): {q2}, R3(Lieu): {q3}, R4(Social): {q4}, R5(Stress): {q5}
+                R6(Code): {q6}, R7(AI): {q7}, R8(Telecom): {q8}
+                R9(Méca): {q9}, R10(Elec): {q10}, R11(Logistique): {q11}, R12(Chimie): {q12}
+                R13(BTP): {q13}, R14(Priorité): {q14}, R15(Rêve): {q15}
+                """
+                
+                prompt = f"""
+                Tu es un Conseiller d'Orientation Expert.
+                Analyse les 15 réponses de cet étudiant : {summary}.
+                
+                CONTEXTE FILIÈRES ENSA : {context}
+                
+                TA MISSION :
+                1. Établis le profil psychologique et technique de l'étudiant.
+                2. Recommande LA meilleure filière (et une alternative) parmi celles de l'école.
+                3. Justifie ton choix en citant les réponses spécifiques (ex: "Comme tu aimes X et Y...").
+                """
+                
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+                response = llm.invoke(prompt)
+                
+                st.success("Analyse terminée !")
+                st.markdown(response.content)
+                st.session_state.messages.append({"role": "assistant", "content": f"**Résultat Test 15Q :**\n{response.content}"})
+
+# ==========================================
+# MODE 4 : CHAT
+# ==========================================
+elif st.session_state.mode == "chat":
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            
+    if prompt := st.chat_input("Posez votre question..."):
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        with st
