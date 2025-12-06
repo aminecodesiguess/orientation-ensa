@@ -13,7 +13,7 @@ except:
     st.error("Clé API non trouvée dans les secrets.")
     st.stop()
 
-st.set_page_config(page_title="Orientation ENSA Tanger", page_icon="🎓")
+st.set_page_config(page_title="Orientation ENSA Tanger", page_icon="🎓", layout="wide")
 
 # --- 2. HEADER ---
 col1, col2 = st.columns([1, 4])
@@ -31,8 +31,6 @@ st.divider()
 # --- 3. GESTION DE L'ÉTAT (SESSION STATE) ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
-# Nouvelle variable pour gérer les 3 modes : "chat", "quiz", "compare"
 if "mode" not in st.session_state:
     st.session_state.mode = "chat"
 
@@ -46,7 +44,6 @@ def initialize_vectorstore():
         return None, "Le dossier 'data' n'existe pas."
     
     files = [f for f in os.listdir(folder_path) if f.endswith('.pdf')]
-    
     if not files:
         return None, "Aucun fichier PDF trouvé."
 
@@ -62,7 +59,6 @@ def initialize_vectorstore():
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         vectorstore = FAISS.from_documents(splits, embeddings)
         return vectorstore, None
-        
     except Exception as e:
         return None, str(e)
 
@@ -73,154 +69,178 @@ if error_msg:
     st.error(f"Erreur : {error_msg}")
     st.stop()
 
-st.session_state.vectorstore = vectorstore
-
-# --- 5. BARRE LATÉRALE (MENU PRINCIPAL) ---
+# --- 5. MENU SIDEBAR ---
 with st.sidebar:
     st.header("🎯 Menu Principal")
     
-    # Navigation avec des boutons qui changent l'état "mode"
     if st.button("💬 Chat avec l'IA", use_container_width=True):
         st.session_state.mode = "chat"
-        
-    if st.button("📝 Test d'Orientation", use_container_width=True):
+    if st.button("📝 Test Orientation (15 Q)", use_container_width=True):
         st.session_state.mode = "quiz"
-        
     if st.button("⚖️ Comparateur de Filières", use_container_width=True):
         st.session_state.mode = "compare"
+    if st.button("🗺️ Roadmap Visuelle", use_container_width=True):
+        st.session_state.mode = "roadmap"
         
     st.divider()
-    if st.button("🗑️ Effacer l'historique"):
+    if st.button("🗑️ Reset Historique"):
         st.session_state.messages = []
         st.rerun()
 
 # --- 6. LOGIQUE PRINCIPALE SELON LE MODE ---
 
 # ==========================================
-# MODE 1 : COMPARATEUR (NOUVEAU 🌟)
+# MODE 1 : ROADMAP VISUELLE (AJOUTÉ)
 # ==========================================
-if st.session_state.mode == "compare":
-    st.markdown("### ⚖️ Comparateur Intelligent")
-    st.info("Entrez deux filières ou concepts pour obtenir un tableau comparatif détaillé.")
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        filiere_1 = st.text_input("Filière A", placeholder="Ex: Génie Informatique")
-    with col_b:
-        filiere_2 = st.text_input("Filière B", placeholder="Ex: Génie Industriel")
-
-    if st.button("Générer le Tableau Comparatif", type="primary"):
-        if filiere_1 and filiere_2:
-            with st.spinner(f"Comparaison entre {filiere_1} et {filiere_2}..."):
-                # 1. Recherche large pour avoir des infos sur les deux sujets
-                retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-                query = f"Informations complètes sur {filiere_1} et {filiere_2}, matières, débouchés, salaire"
-                relevant_docs = retriever.invoke(query)
-                context = "\n\n".join([doc.page_content for doc in relevant_docs])
-
-                # 2. Prompt "Strict Markdown Table"
-                compare_prompt = f"""
-                Tu es un expert de l'ENSA Tanger.
-                
-                TA MISSION :
-                Comparer objectivement "{filiere_1}" et "{filiere_2}" en te basant sur le contexte fourni.
-                
-                FORMAT OBLIGATOIRE :
-                Tu dois répondre UNIQUEMENT avec un Tableau Markdown.
-                Les colonnes doivent être : Critère | {filiere_1} | {filiere_2}
-                
-                Les critères (lignes) doivent inclure :
-                - Objectif de la formation
-                - Modules principaux (Matières clés)
-                - Compétences développées
-                - Types de débouchés (Métiers)
-                - Secteurs d'activité
-                - Point fort majeur
-                
-                CONTEXTE :
-                {context}
-                
-                Si une information manque dans le contexte, mets "N/A" ou "Non précisé".
-                """
-
-                # 3. Génération
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
-                response = llm.invoke(compare_prompt)
-                
-                # 4. Affichage
-                st.markdown(response.content)
-                
-                # On sauvegarde dans l'historique pour garder une trace
-                st.session_state.messages.append({"role": "assistant", "content": f"**Comparaison demandée :**\n{response.content}"})
-
-        else:
-            st.warning("Veuillez remplir les deux champs.")
-
-# ==========================================
-# MODE 2 : QCM (QUIZ)
-# ==========================================
-elif st.session_state.mode == "quiz":
-    st.markdown("### 📝 Test de Personnalité & Orientation")
-    st.caption("Répondez spontanément pour découvrir votre profil.")
-
-    with st.form("quiz_form"):
-        # Questions (Version compacte pour la lisibilité du code)
-        q1 = st.radio("1. Passion ?", ["Théorie & Maths", "Pratique & Fabrication", "Management & Équipe", "Code & Virtuel"])
-        q2 = st.select_slider("2. Niveau en Maths ?", ["Faible", "Moyen", "Bon", "Excellent"])
-        q3 = st.radio("3. Environnement ?", ["Bureau / PC", "Terrain / Usine", "Labo R&D"])
-        q4 = st.radio("4. Approche ?", ["Analytique", "Créative", "Pragmatique"])
-        q5 = st.radio("5. A éviter ?", ["Chimie/Bio", "Informatique", "Mécanique/Élec", "Économie"])
-        
-        # ... Tu peux remettre les 10 questions ici si tu veux, j'ai abrégé pour l'exemple ...
-        
-        submitted = st.form_submit_button("🎓 Analyser mon profil")
-
-        if submitted:
-            with st.spinner("Analyse du profil..."):
+if st.session_state.mode == "roadmap":
+    st.markdown("### 🗺️ Générateur de Parcours Visuel")
+    st.info("Visualisez le cheminement d'une filière sur 5 ans.")
+    
+    filiere_cible = st.text_input("Quelle filière visualiser ?", placeholder="Ex: Génie Informatique, G. Industriel...")
+    
+    if st.button("Générer la Roadmap"):
+        if filiere_cible:
+            with st.spinner("Dessin du graphique..."):
                 retriever = vectorstore.as_retriever()
-                docs = retriever.invoke("Liste des filières")
+                docs = retriever.invoke(f"Programme {filiere_cible} modules années")
                 context = "\n".join([d.page_content for d in docs])
                 
-                summary = f"Passion: {q1}, Maths: {q2}, Env: {q3}, Style: {q4}, Evite: {q5}"
+                graph_prompt = f"""
+                Crée un diagramme Graphviz (DOT) pour la filière : {filiere_cible}.
+                Contexte: {context}.
+                Règles :
+                1. Commence par 'digraph G {{ rankdir=LR; node [shape=box, style=filled, fillcolor=lightblue];'.
+                2. Nœuds : Année3 -> Année4 -> Année5 -> Métiers.
+                3. Dans chaque année, mets 3 modules clés (avec \\n).
+                4. Donne UNIQUEMENT le code DOT.
+                """
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+                response = llm.invoke(graph_prompt)
+                
+                # Nettoyage du code
+                dot_code = response.content.replace("```dot", "").replace("```", "").strip()
+                
+                try:
+                    st.graphviz_chart(dot_code)
+                    st.session_state.messages.append({"role": "assistant", "content": f"Roadmap générée pour {filiere_cible}."})
+                except:
+                    st.error("Erreur lors de la génération du graphique.")
+
+# ==========================================
+# MODE 2 : COMPARATEUR (EXISTANT)
+# ==========================================
+elif st.session_state.mode == "compare":
+    st.markdown("### ⚖️ Comparateur Intelligent")
+    st.info("Entrez deux filières pour obtenir un tableau comparatif.")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        f1 = st.text_input("Filière A", placeholder="Ex: Génie Informatique")
+    with c2:
+        f2 = st.text_input("Filière B", placeholder="Ex: Génie Industriel")
+    
+    if st.button("Comparer"):
+        if f1 and f2:
+            with st.spinner("Comparaison..."):
+                retriever = vectorstore.as_retriever()
+                docs = retriever.invoke(f"Infos complètes {f1} et {f2}")
+                context = "\n".join([d.page_content for d in docs])
                 
                 prompt = f"""
-                Agis comme un conseiller d'orientation. Analyse ce profil étudiant : {summary}.
-                Sur la base de ces documents : {context}.
-                Recommande la meilleure filière ENSA Tanger avec une justification précise.
+                Compare {f1} et {f2} sous forme de Tableau Markdown STRICT.
+                Critères : Objectif, Modules Clés, Compétences, Débouchés, Salaire.
+                Contexte : {context}
+                """
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+                resp = llm.invoke(prompt)
+                st.markdown(resp.content)
+                st.session_state.messages.append({"role": "assistant", "content": resp.content})
+        else:
+            st.warning("Remplissez les deux champs.")
+
+# ==========================================
+# MODE 3 : TEST D'ORIENTATION 15 QUESTIONS (MIS À JOUR)
+# ==========================================
+elif st.session_state.mode == "quiz":
+    st.markdown("### 📝 Test d'Orientation Approfondi (15 Questions)")
+    st.caption("Prenez le temps de répondre pour une analyse précise.")
+
+    with st.form("quiz_15"):
+        col_q1, col_q2 = st.columns(2)
+        
+        with col_q1:
+            st.markdown("**🧠 Préférences Générales**")
+            q1 = st.radio("1. Qu'aimez-vous le plus ?", ["Concevoir (Théorie)", "Fabriquer (Pratique)", "Organiser (Management)", "Coder (Virtuel)"])
+            q2 = st.select_slider("2. Votre niveau en Mathématiques ?", ["Faible", "Moyen", "Bon", "Excellent"])
+            q3 = st.radio("3. Environnement de travail ?", ["Bureau / PC", "Terrain / Chantier", "Laboratoire", "Usine / Production"])
+            q4 = st.radio("4. Travail en équipe ?", ["Je préfère être autonome", "J'aime collaborer", "Je veux diriger l'équipe"])
+            q5 = st.radio("5. Gestion du stress ?", ["Je panique vite", "Je gère bien", "Le stress me motive"])
+
+            st.markdown("**💻 Technique & Info**")
+            q6 = st.radio("6. La programmation informatique ?", ["Je déteste", "Ça m'intéresse un peu", "J'adore ça"])
+            q7 = st.radio("7. L'Intelligence Artificielle & Big Data ?", ["Pas mon truc", "Curieux", "Je veux en faire mon métier"])
+            q8 = st.radio("8. Les réseaux & Télécoms (5G, IoT) ?", ["Bof", "Intéressant", "Passionnant"])
+
+        with col_q2:
+            st.markdown("**⚙️ Industriel & Sciences**")
+            q9 = st.radio("9. La mécanique et les machines ?", ["Ennuyeux", "Utile", "Fascinant"])
+            q10 = st.radio("10. L'électricité et l'électronique ?", ["Trop complexe", "Ça va", "J'aime bricoler/comprendre"])
+            q11 = st.radio("11. La logistique (Supply Chain) ?", ["Pas intéressé", "Pourquoi pas", "C'est stratégique pour moi"])
+            q12 = st.radio("12. Chimie & Environnement ?", ["Je fuis", "Neutre", "C'est l'avenir (Énergie/Eau)"])
+            
+            st.markdown("**🚀 Projection**")
+            q13 = st.radio("13. Secteur BTP / Génie Civil ?", ["Non", "Peut-être", "Oui, bâtir des villes"])
+            q14 = st.select_slider("14. Importance du salaire vs Passion ?", ["Passion 100%", "Équilibré", "Salaire 100%"])
+            q15 = st.text_input("15. En un mot, votre rêve ?", placeholder="Ex: Data Scientist, Chef de Projet, Directeur...")
+
+        submitted = st.form_submit_button("🎓 Analyser mon Profil (Expert)")
+
+        if submitted:
+            with st.spinner("Analyse des 15 réponses..."):
+                retriever = vectorstore.as_retriever()
+                docs = retriever.invoke("Liste détaillée filières génie info indus civil eco telecom")
+                context = "\n".join([d.page_content for d in docs])
+                
+                summary = f"""
+                R1(Goût): {q1}, R2(Maths): {q2}, R3(Lieu): {q3}, R4(Social): {q4}, R5(Stress): {q5}
+                R6(Code): {q6}, R7(AI): {q7}, R8(Telecom): {q8}
+                R9(Méca): {q9}, R10(Elec): {q10}, R11(Logistique): {q11}, R12(Chimie): {q12}
+                R13(BTP): {q13}, R14(Priorité): {q14}, R15(Rêve): {q15}
+                """
+                
+                prompt = f"""
+                Conseiller Orientation ENSA. Analyse ce profil étudiant (15 réponses) : {summary}.
+                CONTEXTE : {context}
+                MISSION : Recommande la meilleure filière + justification.
                 """
                 
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
-                resp = llm.invoke(prompt)
-                st.success("Résultat :")
-                st.markdown(resp.content)
-                st.session_state.messages.append({"role": "assistant", "content": f"**Résultat QCM :**\n{resp.content}"})
+                response = llm.invoke(prompt)
+                
+                st.success("Analyse terminée !")
+                st.markdown(response.content)
+                st.session_state.messages.append({"role": "assistant", "content": f"**Résultat Test 15Q :**\n{response.content}"})
 
 # ==========================================
-# MODE 3 : CHAT (CLASSIC)
+# MODE 4 : CHAT (EXISTANT)
 # ==========================================
 elif st.session_state.mode == "chat":
-    # Affichage historique
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # Input
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            
     if prompt := st.chat_input("Posez votre question..."):
         with st.chat_message("user"):
             st.markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
-
+        
         with st.chat_message("assistant"):
             with st.spinner("..."):
                 retriever = vectorstore.as_retriever()
                 relevant_docs = retriever.invoke(prompt)
-                context = "\n\n".join([doc.page_content for doc in relevant_docs])
+                context = "\n".join([doc.page_content for doc in relevant_docs])
 
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
-                
-                sys_prompt = f"""Expert ENSA Tanger. Contexte: {context}. Question: {prompt}."""
-                
-                response = llm.invoke(sys_prompt)
-                st.markdown(response.content)
-        
-        st.session_state.messages.append({"role": "assistant", "content": response.content})
+                resp = llm.invoke(f"Expert ENSA. Contexte: {context}. Question: {prompt}")
+                st.markdown(resp.content)
+        st.session_state.messages.append({"role": "assistant", "content": resp.content})
