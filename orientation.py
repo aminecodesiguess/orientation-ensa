@@ -242,7 +242,7 @@ elif st.session_state.mode == "quiz":
         with col_q2:
             st.markdown("**⚙️ Indus & Sciences**")
             q9 = st.radio("9. Mécanique ?", ["Ennuyeux", "Utile", "Fascinant"])
-            q10 = st.radio("10. Élec ?", ["Complexe", "Ça va", "Bricoleur"])
+            q10 = st.radio("10. Électricité ?", ["Complexe", "Ça va", "Bricoleur"])
             q11 = st.radio("11. Logistique ?", ["Non", "Pourquoi pas", "Stratégique"])
             q12 = st.radio("12. Chimie ?", ["Je fuis", "Neutre", "Avenir"])
             st.markdown("**🚀 Avenir**")
@@ -302,3 +302,4 @@ elif st.session_state.mode == "chat":
                 resp = llm.invoke(sys_prompt)
                 st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
+
