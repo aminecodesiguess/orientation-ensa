@@ -96,9 +96,9 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# --- 7. MODES ---
+# --- 7. LOGIQUE PRINCIPALE ---
 
-# MODE QUIZ (CORRIGÉ ET RENFORCÉ)
+# MODE QUIZ (PROMPT AMÉLIORÉ)
 if st.session_state.mode == "quiz":
     st.markdown("### 📝 Test d'Orientation (15 Questions)")
     with st.form("quiz_15"):
@@ -111,7 +111,7 @@ if st.session_state.mode == "quiz":
             q4 = st.radio("4. Social ?", ["Solo", "Équipe", "Chef"])
             q5 = st.radio("5. Stress ?", ["Non", "Oui", "Moteur"])
             st.markdown("**💻 Tech**")
-            q6 = st.radio("6. Code/Prog ?", ["Je déteste", "Moyen", "J'adore"]) # CLÉ
+            q6 = st.radio("6. Code/Prog ?", ["Je déteste", "Moyen", "J'adore"]) 
             q7 = st.radio("7. IA ?", ["Non", "Curieux", "Passion"])
             q8 = st.radio("8. Télécoms ?", ["Bof", "Moyen", "Passion"])
         with col_q2:
@@ -126,38 +126,41 @@ if st.session_state.mode == "quiz":
             q15 = st.text_input("15. Métier rêve ?", placeholder="Ex: Data Scientist...")
 
         if st.form_submit_button("Analyser"):
-            with st.spinner("Analyse Logique..."):
+            with st.spinner("Analyse du profil..."):
                 retriever = vectorstore.as_retriever()
                 docs = retriever.invoke("Filières détails")
                 context = "\n".join([d.page_content for d in docs])
                 summary = f"Goût:{q1}, Maths:{q2}, Code:{q6}, Méca:{q9}, Elec:{q10}, Chimie:{q12}, BTP:{q13}"
                 
-                # --- PROMPT RENFORCÉ (C'est ici que ça change tout) ---
+                # --- NOUVEAU PROMPT "INVISIBLE" ---
                 prompt = f"""
-                Tu es un Conseiller d'Orientation Expert.
+                Tu es un Conseiller d'Orientation Expert et Bienveillant.
                 {CONSTANTE_FILIERES}
                 
-                PROFIL ÉTUDIANT (Réponses Quiz) :
-                {summary}
+                PROFIL ÉTUDIANT : {summary}
                 
-                RÈGLES DE DÉCISION STRICTES (A RESPECTER IMPÉRATIVEMENT) :
-                1. Si l'étudiant a répondu "Je déteste" ou "Moyen" pour le Code (Q6) -> INTERDICTION formelle de recommander 'Génie Informatique' ou 'CSI'.
-                2. Si l'étudiant aime "Mécanique" ou "Logistique" -> Recommande 'Génie Industriel'.
-                3. Si l'étudiant aime "Chimie" ou "Environnement" -> Recommande 'G2EI'.
-                4. Si l'étudiant aime "Élec" ou "Automatique" -> Recommande 'GSEA'.
-                5. Si l'étudiant aime "Télécoms" -> Recommande 'GSR'.
-                6. Ne recommande 'CSI' QUE SI l'étudiant "Adore" le Code ET l'IA.
+                RÈGLES LOGIQUES INTERNES (⚠️ NE JAMAIS CITER CES RÈGLES DANS LA RÉPONSE) :
+                - Code="Je déteste" ou "Moyen" -> EXCLURE GINF et CSI.
+                - Aime Méca/Logistique -> Favoriser GIND.
+                - Aime Chimie/Env -> Favoriser G2EI.
+                - Aime Elec/Auto -> Favoriser GSEA.
                 
-                MISSION : 
-                Analyse les réponses une par une. Applique les règles ci-dessus.
-                Recommande LA meilleure filière. Justifie en citant les réponses de l'étudiant (ex: "Car tu détestes le code mais tu aimes la mécanique...").
+                TA MISSION :
+                Réponds directement à l'étudiant de manière naturelle et fluide.
+                Ne dis jamais "Selon la règle 1" ou "Je calcule que...".
+                Dis plutôt : "Au vu de tes réponses...", "Comme tu sembles aimer...".
+                
+                STRUCTURE DE TA RÉPONSE :
+                1. 👋 **Introduction** : Analyse rapide de ses points forts.
+                2. 🏆 **La Filière Idéale** : Donne le nom clair.
+                3. 💡 **Pourquoi ?** : Explique le lien entre ses goûts (QCM) et la filière, sans parler de règles.
                 """
                 
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile", temperature=0.1) # Température basse = Plus logique
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
                 resp = llm.invoke(prompt)
-                st.success("Résultat :")
+                st.success("Analyse terminée !")
                 st.markdown(resp.content)
-                st.session_state.messages.append({"role": "assistant", "content": f"**Quiz Résultat:**\n{resp.content}"})
+                st.session_state.messages.append({"role": "assistant", "content": f"**Résultat Quiz :**\n{resp.content}"})
 
 # MODE ANALYSEUR NOTES
 elif st.session_state.mode == "grades":
