@@ -6,24 +6,22 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 
-# --- 1. LISTE OFFICIELLE DES FILIÈRES (VÉRITÉ ABSOLUE) ---
+# --- 1. LISTE OFFICIELLE DES FILIÈRES ---
 CONSTANTE_FILIERES = """
-LISTE OFFICIELLE ET EXCLUSIVE DES 6 FILIÈRES DE L'ENSA TANGER (Cycle Ingénieur) :
-1.r Génie Systèmes et Réseaux (GSR)
+LISTE OFFICIELLE DES 6 FILIÈRES DE L'ENSA TANGER :
+1. Génie Systèmes et Réseaux (GSR)
 2. Génie Informatique (GINF)
 3. Génie Industriel (GIND)
 4. Génie des Systèmes Électroniques et Automatiques (GSEA)
 5. Génie Énergétique et Environnement Industriel (G2EI)
 6. Cybersecurity and Cyberintelligence (CSI)
-
-N'invente aucune aute filière.
 """
 
-# --- 2. CONFIGURATION & SÉCURITÉ ---
+# --- 2. CONFIGURATION ---
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except:
-    st.error("Erreur : Clé API non trouvée dans les secrets (st.secrets).")
+    st.error("Erreur : Clé API non trouvée dans les secrets.")
     st.stop()
 
 st.set_page_config(page_title="Orientation ENSA Tanger", page_icon="🎓", layout="wide")
@@ -41,38 +39,35 @@ with col2:
 
 st.divider()
 
-# --- 4. GESTION DE L'ÉTAT (SESSION STATE) ---
+# --- 4. STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "mode" not in st.session_state:
     st.session_state.mode = "chat"
 
-
-# --- 5. CHARGEMENT DES DONNÉES (OPTIMISÉ PDF + TXT) ---
+# --- 5. DATA LOADING ---
 @st.cache_resource(show_spinner=False)
 def initialize_vectorstore():
     folder_path = "data"
     all_docs = []
-
+    
     if not os.path.exists(folder_path):
         return None, "Dossier 'data' introuvable."
-
+    
     files = [f for f in os.listdir(folder_path) if f.endswith('.pdf') or f.endswith('.txt')]
     if not files:
-        return None, "Aucun fichier trouvé dans 'data'."
+        return None, "Aucun fichier trouvé."
 
     try:
         for filename in files:
             file_path = os.path.join(folder_path, filename)
-
             if filename.endswith('.pdf'):
                 loader = PyPDFLoader(file_path)
             elif filename.endswith('.txt'):
                 loader = TextLoader(file_path, encoding='utf-8')
-
             docs = loader.load()
             all_docs.extend(docs)
-
+            
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
         splits = text_splitter.split_documents(all_docs)
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -81,229 +76,166 @@ def initialize_vectorstore():
     except Exception as e:
         return None, str(e)
 
-
 with st.spinner("Chargement de la base de connaissances..."):
     vectorstore, error_msg = initialize_vectorstore()
 
 if error_msg:
-    st.error(f"Erreur critique : {error_msg}")
+    st.error(error_msg)
     st.stop()
 
-# --- 6. MENU SIDEBAR ---
+# --- 6. MENU ---
 with st.sidebar:
     st.header("🎯 Menu Principal")
-
-    if st.button("💬 Chat avec l'IA", use_container_width=True):
-        st.session_state.mode = "chat"
-
-    if st.button("📊 Analyseur de Notes", use_container_width=True):
-        st.session_state.mode = "grades"
-
-    if st.button("📝 Test Orientation (15 Q)", use_container_width=True):
-        st.session_state.mode = "quiz"
-
-    if st.button("⚖️ Comparateur de Filières", use_container_width=True):
-        st.session_state.mode = "compare"
-
-    if st.button("🗺️ Roadmap Visuelle", use_container_width=True):
-        st.session_state.mode = "roadmap"
-
+    if st.button("💬 Chat IA", use_container_width=True): st.session_state.mode = "chat"
+    if st.button("📊 Analyseur Notes", use_container_width=True): st.session_state.mode = "grades"
+    if st.button("📝 Test Orientation", use_container_width=True): st.session_state.mode = "quiz"
+    if st.button("⚖️ Comparateur", use_container_width=True): st.session_state.mode = "compare"
+    if st.button("🗺️ Roadmap", use_container_width=True): st.session_state.mode = "roadmap"
     st.divider()
-    if st.button("🗑️ Reset Historique"):
+    if st.button("🗑️ Reset"):
         st.session_state.messages = []
         st.rerun()
 
-# --- 7. LOGIQUE PRINCIPALE SELON LE MODE ---
+# --- 7. MODES ---
 
-# ==========================================
-# MODE 1 : ANALYSEUR DE NOTES (NOUVEAU 🌟)
-# ==========================================
-if st.session_state.mode == "grades":
-    st.markdown("### 📊 Analyseur de Notes & Compatibilité")
-    st.info("Entrez vos moyennes pour voir quelles filières correspondent le mieux à votre profil académique.")
-
-    with st.form("grade_form"):
-        c1, c2 = st.columns(2)
-        with c1:
-            note_math = st.number_input("Mathématiques", 0.0, 20.0, 12.0)
-            note_phys = st.number_input("Physique / Élec", 0.0, 20.0, 12.0)
-        with c2:
-            note_info = st.number_input("Informatique / Algo", 0.0, 20.0, 12.0)
-            note_lang = st.number_input("Français / Anglais", 0.0, 20.0, 12.0)
-
-        note_statistique = st.slider("Aisance en statistique (0=Faible, 20=Fort)", 0, 20, 10)
-
-        if st.form_submit_button("📈 Calculer mes Compatibilités"):
-            with st.spinner("Calcul scientifique des scores..."):
-                retriever = vectorstore.as_retriever()
-                docs = retriever.invoke("Prérequis matières coefficients filières")
-                context = "\n".join([d.page_content for d in docs])
-
-                notes_summary = f"Maths:{note_math}, Phys:{note_phys}, Info:{note_info}, Lang:{note_lang}, Statistique:{note_statistique}"
-
-                prompt = f"""
-                Tu es un Analyste Académique ENSA.
-                {CONSTANTE_FILIERES}
-
-                MISSION : Pour CHAQUE filière de la liste officielle, calcule un score de compatibilité (0-100%) basé sur les notes de l'étudiant.
-
-                NOTES ÉTUDIANT : {notes_summary}
-                CONTEXTE PDF : {context}
-
-                Règles de calcul mental :
-                - GINF/GSR/CSI/GSEA demandent beaucoup de Maths et Info.
-                - GIND demande Maths + Statistiques.
-                - G2EI demande Physique + Thermodynamique (Maths utile).
-
-                Format de réponse : Tableau Markdown (Filière | Score | Analyse courte).
-                """
-
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
-                response = llm.invoke(prompt)
-
-                st.markdown(response.content)
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": f"**Analyse Notes :**\n{response.content}"})
-
-
-# ==========================================
-# MODE 2 : ROADMAP VISUELLE
-# ==========================================
-elif st.session_state.mode == "roadmap":
-    st.markdown("### 🗺️ Générateur de Parcours Visuel")
-    filiere_cible = st.text_input("Quelle filière visualiser ?", placeholder="Ex: GINF, CSI, GSEA...")
-
-    if st.button("Générer la Roadmap"):
-        if filiere_cible:
-            with st.spinner("Dessin du graphique..."):
-                retriever = vectorstore.as_retriever()
-                docs = retriever.invoke(f"Programme {filiere_cible} modules")
-                context = "\n".join([d.page_content for d in docs])
-
-                graph_prompt = f"""
-                Crée un diagramme Graphviz (DOT) pour : {filiere_cible}.
-                Contexte: {context}.
-                {CONSTANTE_FILIERES}
-                Règles : digraph G {{ rankdir=LR; node [shape=box, style=filled, fillcolor=lightblue];
-                Nœuds : Année3 -> Année4 -> Année5 -> Métiers.
-                Donne UNIQUEMENT le code DOT. Pas de ```.
-                """
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
-                response = llm.invoke(graph_prompt)
-                dot_code = response.content.replace("```dot", "").replace("```", "").strip()
-                try:
-                    st.graphviz_chart(dot_code)
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": f"Roadmap générée pour {filiere_cible}."})
-                except:
-                    st.error("Erreur graphique. L'IA a mal formaté le code DOT.")
-
-# ==========================================
-# MODE 3 : COMPARATEUR
-# ==========================================
-elif st.session_state.mode == "compare":
-    st.markdown("### ⚖️ Comparateur Intelligent")
-    c1, c2 = st.columns(2)
-    f1 = c1.text_input("Filière A", "GINF")
-    f2 = c2.text_input("Filière B", "GSEA")
-
-    if st.button("Comparer"):
-        with st.spinner("Comparaison..."):
-            retriever = vectorstore.as_retriever()
-            docs = retriever.invoke(f"Infos {f1} et {f2}")
-            context = "\n".join([d.page_content for d in docs])
-
-            prompt = f"""
-            Compare {f1} et {f2} (Tableau Markdown).
-            {CONSTANTE_FILIERES}
-            Critères : Objectif, Modules Clés, Débouchés, Salaire.
-            Contexte : {context}
-            """
-            llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
-            resp = llm.invoke(prompt)
-            st.markdown(resp.content)
-            st.session_state.messages.append({"role": "assistant", "content": resp.content})
-
-# ==========================================
-# MODE 4 : TEST D'ORIENTATION (15 Q)
-# ==========================================
-elif st.session_state.mode == "quiz":
+# MODE QUIZ (CORRIGÉ ET RENFORCÉ)
+if st.session_state.mode == "quiz":
     st.markdown("### 📝 Test d'Orientation (15 Questions)")
-
     with st.form("quiz_15"):
         col_q1, col_q2 = st.columns(2)
         with col_q1:
             st.markdown("**🧠 Préférences**")
             q1 = st.radio("1. Passion ?", ["Théorie", "Pratique", "Management", "Code"])
-            q2 = st.select_slider("2. Niveau Maths ?", ["Faible", "Moyen", "Bon", "Excellent"])
-            q3 = st.radio("3. Environnement ?", ["Bureau", "Terrain", "Labo", "Usine"])
-            q4 = st.radio("4. Équipe ?", ["Autonome", "Collaboratif", "Directeur"])
-            q5 = st.radio("5. Stress ?", ["Panique", "Gère bien", "Moteur"])
+            q2 = st.select_slider("2. Maths ?", ["Faible", "Moyen", "Bon", "Excellent"])
+            q3 = st.radio("3. Lieu ?", ["Bureau", "Terrain", "Labo", "Usine"])
+            q4 = st.radio("4. Social ?", ["Solo", "Équipe", "Chef"])
+            q5 = st.radio("5. Stress ?", ["Non", "Oui", "Moteur"])
             st.markdown("**💻 Tech**")
-            q6 = st.radio("6. Code ?", ["Déteste", "Moyen", "J'adore"])
+            q6 = st.radio("6. Code/Prog ?", ["Je déteste", "Moyen", "J'adore"]) # CLÉ
             q7 = st.radio("7. IA ?", ["Non", "Curieux", "Passion"])
-            q8 = st.radio("8. Télécoms ?", ["Bof", "Intéressant", "Passion"])
+            q8 = st.radio("8. Télécoms ?", ["Bof", "Moyen", "Passion"])
         with col_q2:
-            st.markdown("**⚙️ Indus & Sciences**")
+            st.markdown("**⚙️ Indus/Sciences**")
             q9 = st.radio("9. Mécanique ?", ["Ennuyeux", "Utile", "Fascinant"])
-            q10 = st.radio("10. Électricité ?", ["Complexe", "Ça va", "Bricoleur"])
-            q11 = st.radio("11. Logistique ?", ["Non", "Pourquoi pas", "Stratégique"])
-            q12 = st.radio("12. Statistique ?", ["Je fuis", "Neutre", "Avenir"])
-            st.markdown("**🚀 Avenir**")
+            q10 = st.radio("10. Élec ?", ["Dur", "Ça va", "Top"])
+            q11 = st.radio("11. Logistique ?", ["Non", "Moyen", "Top"])
+            q12 = st.radio("12. Chimie/Env ?", ["Non", "Moyen", "Oui"])
+            st.markdown("**🚀 Futur**")
             q13 = st.radio("13. BTP ?", ["Non", "Peut-être", "Oui"])
-            q14 = st.select_slider("14. Salaire vs Passion ?", ["Passion", "Équilibré", "Salaire"])
-            q15 = st.text_input("15. Rêve ?", placeholder="Ex: Data Scientist...")
+            q14 = st.select_slider("14. Priorité ?", ["Passion", "Mix", "Argent"])
+            q15 = st.text_input("15. Métier rêve ?", placeholder="Ex: Data Scientist...")
 
         if st.form_submit_button("Analyser"):
-            with st.spinner("Analyse approfondie..."):
+            with st.spinner("Analyse Logique..."):
                 retriever = vectorstore.as_retriever()
                 docs = retriever.invoke("Filières détails")
                 context = "\n".join([d.page_content for d in docs])
-                summary = f"R1:{q1}, R2:{q2}, R6:{q6}, R9:{q9}, R13:{q13}, R15:{q15}"
-
+                summary = f"Goût:{q1}, Maths:{q2}, Code:{q6}, Méca:{q9}, Elec:{q10}, Chimie:{q12}, BTP:{q13}"
+                
+                # --- PROMPT RENFORCÉ (C'est ici que ça change tout) ---
                 prompt = f"""
-                Conseiller ENSA. Profil : {summary}.
+                Tu es un Conseiller d'Orientation Expert.
                 {CONSTANTE_FILIERES}
-                MISSION : Recommande la meilleure filière parmi les 6 officielles.
-                Justifie ton choix avec les réponses du quiz.
-                Contexte : {context}
+                
+                PROFIL ÉTUDIANT (Réponses Quiz) :
+                {summary}
+                
+                RÈGLES DE DÉCISION STRICTES (A RESPECTER IMPÉRATIVEMENT) :
+                1. Si l'étudiant a répondu "Je déteste" ou "Moyen" pour le Code (Q6) -> INTERDICTION formelle de recommander 'Génie Informatique' ou 'CSI'.
+                2. Si l'étudiant aime "Mécanique" ou "Logistique" -> Recommande 'Génie Industriel'.
+                3. Si l'étudiant aime "Chimie" ou "Environnement" -> Recommande 'G2EI'.
+                4. Si l'étudiant aime "Élec" ou "Automatique" -> Recommande 'GSEA'.
+                5. Si l'étudiant aime "Télécoms" -> Recommande 'GSR'.
+                6. Ne recommande 'CSI' QUE SI l'étudiant "Adore" le Code ET l'IA.
+                
+                MISSION : 
+                Analyse les réponses une par une. Applique les règles ci-dessus.
+                Recommande LA meilleure filière. Justifie en citant les réponses de l'étudiant (ex: "Car tu détestes le code mais tu aimes la mécanique...").
                 """
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+                
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile", temperature=0.1) # Température basse = Plus logique
                 resp = llm.invoke(prompt)
                 st.success("Résultat :")
                 st.markdown(resp.content)
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": f"**Résultat Quiz :**\n{resp.content}"})
+                st.session_state.messages.append({"role": "assistant", "content": f"**Quiz Résultat:**\n{resp.content}"})
 
-# ==========================================
-# MODE 5 : CHAT (DÉFAUT)
-# ==========================================
-elif st.session_state.mode == "chat":
-    # Affichage
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+# MODE ANALYSEUR NOTES
+elif st.session_state.mode == "grades":
+    st.markdown("### 📊 Analyseur Notes")
+    with st.form("grades"):
+        c1, c2 = st.columns(2)
+        with c1:
+            m = st.number_input("Maths", 0., 20., 12.)
+            p = st.number_input("Physique", 0., 20., 12.)
+        with c2:
+            i = st.number_input("Info", 0., 20., 12.)
+            l = st.number_input("Langues", 0., 20., 12.)
+        ch = st.slider("Chimie", 0, 20, 10)
+        
+        if st.form_submit_button("Calculer"):
+            with st.spinner("Calcul..."):
+                retriever = vectorstore.as_retriever()
+                docs = retriever.invoke("Filières")
+                ctx = "\n".join([d.page_content for d in docs])
+                prompt = f"""
+                Analyste ENSA. {CONSTANTE_FILIERES}.
+                Notes: Maths:{m}, Phys:{p}, Info:{i}, Chimie:{ch}.
+                Calcule score compatibilité % pour chaque filière.
+                Règle: Si Info < 12, Score GINF/CSI < 50%. Si Chimie < 10, Score G2EI < 50%.
+                Tableau Markdown.
+                """
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+                resp = llm.invoke(prompt)
+                st.markdown(resp.content)
+                st.session_state.messages.append({"role": "assistant", "content": resp.content})
 
-    # Input
-    if prompt := st.chat_input("Posez votre question sur l'ENSA..."):
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
-
-        with st.chat_message("assistant"):
+# MODE ROADMAP
+elif st.session_state.mode == "roadmap":
+    st.markdown("### 🗺️ Roadmap")
+    f = st.text_input("Filière ?")
+    if st.button("Générer"):
+        if f:
             with st.spinner("..."):
                 retriever = vectorstore.as_retriever()
-                relevant_docs = retriever.invoke(prompt)
-                context = "\n".join([doc.page_content for doc in relevant_docs])
-
+                docs = retriever.invoke(f"Programme {f}")
+                ctx = "\n".join([d.page_content for d in docs])
+                prompt = f"Graphviz DOT pour {f}. Contexte: {ctx}. Rankdir=LR. Nodes: Année3->4->5->Métiers. Code DOT uniquement."
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+                resp = llm.invoke(prompt)
+                dot = resp.content.replace("```dot", "").replace("```", "").strip()
+                try: st.graphviz_chart(dot)
+                except: st.error("Erreur graphique")
 
-                sys_prompt = f"""
-                Tu es un Expert ENSA Tanger.
-                {CONSTANTE_FILIERES}
-                Contexte PDF : {context}
-                Question : {prompt}
-                """
-                resp = llm.invoke(sys_prompt)
-                st.markdown(resp.content)
+# MODE COMPARE
+elif st.session_state.mode == "compare":
+    st.markdown("### ⚖️ Comparateur")
+    c1, c2 = st.columns(2)
+    f1 = c1.text_input("Filière 1", "GINF")
+    f2 = c2.text_input("Filière 2", "GIND")
+    if st.button("Comparer"):
+        with st.spinner("..."):
+            retriever = vectorstore.as_retriever()
+            docs = retriever.invoke(f"{f1} {f2}")
+            ctx = "\n".join([d.page_content for d in docs])
+            prompt = f"Compare {f1} {f2}. Tableau Markdown. Critères: Objectif, Modules, Débouchés. Contexte: {ctx}"
+            llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+            resp = llm.invoke(prompt)
+            st.markdown(resp.content)
+            st.session_state.messages.append({"role": "assistant", "content": resp.content})
+
+# MODE CHAT
+elif st.session_state.mode == "chat":
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]): st.markdown(m["content"])
+    if p := st.chat_input("Question..."):
+        with st.chat_message("user"): st.markdown(p)
+        st.session_state.messages.append({"role": "user", "content": p})
+        with st.chat_message("assistant"):
+            retriever = vectorstore.as_retriever()
+            docs = retriever.invoke(p)
+            ctx = "\n".join([d.page_content for d in docs])
+            prompt = f"Expert ENSA. {CONSTANTE_FILIERES}. Contexte: {ctx}. Question: {p}"
+            llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+            resp = llm.invoke(prompt)
+            st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
