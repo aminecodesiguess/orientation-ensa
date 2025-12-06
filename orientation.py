@@ -62,7 +62,11 @@ def initialize_vectorstore():
             all_docs.extend(docs)
             
         # Découpage
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+       text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,    # Morceaux plus petits (plus précis)
+            chunk_overlap=100, # Moins de chevauchement nécessaire
+            separators=["\n\n", "\n", ".", " ", ""] # Coupe de préférence aux paragraphes
+        )
         splits = text_splitter.split_documents(all_docs)
         
         # Vectorisation
@@ -167,3 +171,4 @@ if prompt := st.chat_input("Bonjour, je voudrais des infos sur les filières..."
             st.markdown(response.content)
     
     st.session_state.messages.append({"role": "assistant", "content": response.content})
+
