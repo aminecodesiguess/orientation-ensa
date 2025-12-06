@@ -90,7 +90,7 @@ with st.sidebar:
     if st.button("📊 Analyseur Notes", use_container_width=True): st.session_state.mode = "grades"
     if st.button("📝 Test Orientation", use_container_width=True): st.session_state.mode = "quiz"
     if st.button("⚖️ Comparateur", use_container_width=True): st.session_state.mode = "compare"
-    if st.button("🗺️ Roadmap", use_container_width=True): st.session_state.mode = "roadmap"
+    
     st.divider()
     if st.button("🗑️ Reset"):
         st.session_state.messages = []
@@ -98,7 +98,7 @@ with st.sidebar:
 
 # --- 7. LOGIQUE PRINCIPALE ---
 
-# MODE QUIZ (PROMPT AMÉLIORÉ)
+# MODE QUIZ (PROMPT "INVISIBLE" & LOGIQUE)
 if st.session_state.mode == "quiz":
     st.markdown("### 📝 Test d'Orientation (15 Questions)")
     with st.form("quiz_15"):
@@ -132,7 +132,7 @@ if st.session_state.mode == "quiz":
                 context = "\n".join([d.page_content for d in docs])
                 summary = f"Goût:{q1}, Maths:{q2}, Code:{q6}, Méca:{q9}, Elec:{q10}, Chimie:{q12}, BTP:{q13}"
                 
-                # --- NOUVEAU PROMPT "INVISIBLE" ---
+                # PROMPT AMÉLIORÉ (Invisible Rules)
                 prompt = f"""
                 Tu es un Conseiller d'Orientation Expert et Bienveillant.
                 {CONSTANTE_FILIERES}
@@ -147,13 +147,13 @@ if st.session_state.mode == "quiz":
                 
                 TA MISSION :
                 Réponds directement à l'étudiant de manière naturelle et fluide.
-                Ne dis jamais "Selon la règle 1" ou "Je calcule que...".
+                Ne dis jamais "Selon la règle 1".
                 Dis plutôt : "Au vu de tes réponses...", "Comme tu sembles aimer...".
                 
-                STRUCTURE DE TA RÉPONSE :
-                1. 👋 **Introduction** : Analyse rapide de ses points forts.
-                2. 🏆 **La Filière Idéale** : Donne le nom clair.
-                3. 💡 **Pourquoi ?** : Explique le lien entre ses goûts (QCM) et la filière, sans parler de règles.
+                STRUCTURE :
+                1. 👋 **Analyse** : Tes points forts.
+                2. 🏆 **La Filière Idéale** : Le nom clair.
+                3. 💡 **Pourquoi ?** : Lien entre goûts et filière.
                 """
                 
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
@@ -191,23 +191,6 @@ elif st.session_state.mode == "grades":
                 resp = llm.invoke(prompt)
                 st.markdown(resp.content)
                 st.session_state.messages.append({"role": "assistant", "content": resp.content})
-
-# MODE ROADMAP
-elif st.session_state.mode == "roadmap":
-    st.markdown("### 🗺️ Roadmap")
-    f = st.text_input("Filière ?")
-    if st.button("Générer"):
-        if f:
-            with st.spinner("..."):
-                retriever = vectorstore.as_retriever()
-                docs = retriever.invoke(f"Programme {f}")
-                ctx = "\n".join([d.page_content for d in docs])
-                prompt = f"Graphviz DOT pour {f}. Contexte: {ctx}. Rankdir=LR. Nodes: Année3->4->5->Métiers. Code DOT uniquement."
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
-                resp = llm.invoke(prompt)
-                dot = resp.content.replace("```dot", "").replace("```", "").strip()
-                try: st.graphviz_chart(dot)
-                except: st.error("Erreur graphique")
 
 # MODE COMPARE
 elif st.session_state.mode == "compare":
