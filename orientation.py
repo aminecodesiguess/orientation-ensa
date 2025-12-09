@@ -18,7 +18,7 @@ st.set_page_config(page_title="Orientation ENSA Tanger", page_icon="🎓", layou
 
 # --- 2. MODÈLE SÉCURISÉ (ANTI-PLANTAGE) ---
 # On utilise la version 8b car elle est très rapide et ne bloque jamais en démo.
-MODEL_NAME = "llama3-8b-8192"
+MODEL_NAME = "llama-3.3-70b-versatile"
 
 # --- 3. LISTE OFFICIELLE ---
 CONSTANTE_FILIERES = """
@@ -244,3 +244,4 @@ elif st.session_state.mode == "chat":
             resp = llm.invoke(prompt)
             st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
+
