@@ -260,7 +260,8 @@ elif st.session_state.mode == "grades":
                 st.session_state.last_pdf = pdf_bytes
                 st.rerun()
 
-    if st.session_state.messages and "Tableau" in str(st.session_state.messages[-1]["content"]) or "Analyse" in str(st.session_state.messages[-1]["content"]):
+    # Remplace la ligne qui plante par celle-ci (avec les parenthèses ajoutées) :
+    if st.session_state.messages and ("Tableau" in str(st.session_state.messages[-1]["content"]) or "Analyse" in str(st.session_state.messages[-1]["content"])):
         st.markdown(st.session_state.messages[-1]["content"])
         if st.session_state.last_pdf:
             st.download_button(
@@ -268,6 +269,7 @@ elif st.session_state.mode == "grades":
                 data=st.session_state.last_pdf,
                 file_name="bilan_notes_ensa.pdf",
                 mime="application/pdf"
+    
             )
 
 # MODE COMPARE
@@ -303,3 +305,4 @@ elif st.session_state.mode == "chat":
             resp = llm.invoke(prompt)
             st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
+
