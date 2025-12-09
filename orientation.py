@@ -177,36 +177,75 @@ if st.session_state.mode == "quiz":
             q15 = st.text_input("15. Métier rêve ?", placeholder="Ex: Data Scientist...")
 
         if st.form_submit_button("Analyser"):
-            with st.spinner("Analyse du profil..."):
+            with st.spinner("Analyse croisée de tes 15 réponses..."):
+                # 1. Récupération du contexte (Base de données)
                 retriever = vectorstore.as_retriever()
-                docs = retriever.invoke("Filières détails")
+                docs = retriever.invoke("Détails modules débouchés filières")
                 context = "\n".join([d.page_content for d in docs])
-                summary = f"Goût:{q1}, Maths:{q2}, Code:{q6}, Méca:{q9}, Elec:{q10}, Chimie:{q12}, BTP:{q13}"
                 
-                prompt = f"""
-                Tu es un Conseiller d'Orientation Expert.
-                {CONSTANTE_FILIERES}
-                
-                PROFIL ÉTUDIANT : {summary}
-                
-                RÈGLES LOGIQUES (NE PAS CITER) :
-                - Code="Je déteste"/"Moyen" -> EXCLURE GINF/CSI.
-                - Aime Méca/Logistique -> GIND.
-                - Aime Chimie/Env -> G2EI.
-                - Aime Elec/Auto -> GSEA.
-                
-                Réponds naturellement : "Au vu de tes réponses...".
-                Structure: Introduction, Filière Idéale, Pourquoi.
+                # 2. Résumé structuré des 15 réponses (CRUCIAL pour la précision)
+                summary = f"""
+                PROFIL CANDIDAT :
+                - Passion dominante : {q1}
+                - Niveau Maths : {q2} | Code : {q6} | IA : {q7}
+                - Préférences Terrain/Bureau : {q3} | Social : {q4} | Stress : {q5}
+                - Intérêts Tech : Télécoms ({q8})
+                - Intérêts Indus : Méca ({q9}), Élec ({q10}), Logistique ({q11}), Chimie/Env ({q12}), BTP ({q13})
+                - Priorité vie : {q14}
+                - Rêve : {q15}
                 """
                 
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+                # 3. LE PROMPT "EXPERT"
+                prompt = f"""
+                Tu es un Expert en Orientation Stratégique à l'ENSA Tanger.
+                
+                TES OUTILS :
+                {CONSTANTE_FILIERES}
+                
+                DONNÉES DU CANDIDAT :
+                {summary}
+                
+                TA MISSION (Analyse Algorithmique) :
+                N'invente rien. Base-toi sur la logique suivante pour déterminer le TOP 1 et le TOP 2 :
+                
+                1. LOGIQUE D'ÉLIMINATION :
+                   - Si "Code" = "Je déteste" -> INTERDIRE GINF et CSI.
+                   - Si "Maths" = "Faible" -> ÉVITER GINF, CSI, GSEA.
+                   - Si "Chimie" = "Non" -> ÉVITER G2EI.
+                
+                2. LOGIQUE DE MATCHING (Score Mental) :
+                   - GINF : Score élevé si Code="J'adore" + Maths > Moyen.
+                   - GIND : Score élevé si Logistique="Top" OU Méca="Fascinant" + Gestion.
+                   - GSEA : Score élevé si Élec="Top" + Physique/Auto.
+                   - GSR : Score élevé si Télécoms="Passion" + Réseaux.
+                   - G2EI : Score élevé si Chimie/Env="Oui" + Énergie.
+                   - CSI : Score élevé si IA="Passion" + Code="J'adore" + Curiosité Cyber.
+                
+                FORMAT DE RÉPONSE ATTENDU (Markdown) :
+                
+                ## 🏆 Ta Filière Idéale : [Nom de la filière]
+                **Pourquoi c'est le match parfait :**
+                Explique en 2 phrases en liant ses réponses (ex: "Tu aimes X et Y, or cette filière contient le module Z...").
+                
+                ## 🥈 Alternative Crédible : [Nom de la 2ème filière]
+                Pourquoi celle-ci pourrait aussi te plaire (plan B).
+                
+                ## ⚠️ Point de Vigilance
+                Identifie une faiblesse dans son profil par rapport à son choix (ex: "Attention, tu dis être faible en Maths, il faudra bosser l'analyse...").
+                
+                ## 🔮 Projection Métier
+                Un exemple de métier concret adapté à son rêve "{q15}".
+                """
+                
+                # 4. Appel IA avec température basse (0.4) pour rester logique mais fluide
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile", temperature=0.4)
                 resp = llm.invoke(prompt)
                 
-                # Sauvegarde du message
-                st.session_state.messages.append({"role": "assistant", "content": f"**Résultat Quiz :**\n{resp.content}"})
+                # 5. Sauvegarde et PDF
+                st.session_state.messages.append({"role": "assistant", "content": f"**Résultat de l'Analyse :**\n\n{resp.content}"})
                 
                 # Génération du PDF
-                pdf_bytes = create_pdf(f"Réponses clés: {summary}", resp.content)
+                pdf_bytes = create_pdf(f"Réponses clés Quiz: {q1}, {q2}, {q6}, {q15}", resp.content)
                 st.session_state.last_pdf = pdf_bytes
                 st.rerun()
 
@@ -336,6 +375,7 @@ elif st.session_state.mode == "chat":
             resp = llm.invoke(prompt)
             st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
+
 
 
 
