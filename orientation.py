@@ -87,13 +87,18 @@ with col2:
 st.divider()
 
 # --- 5. STATE ---
+# --- 5. STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "mode" not in st.session_state:
     st.session_state.mode = "chat"
-# Variable pour stocker le rapport PDF en mémoire
 if "last_pdf" not in st.session_state:
     st.session_state.last_pdf = None
+
+# --- AJOUT CRUCIAL ICI ---
+# On crée une mémoire spécifique pour le résultat du Quiz
+if "quiz_result" not in st.session_state:
+    st.session_state.quiz_result = None
 
 # --- 6. DATA LOADING ---
 @st.cache_resource(show_spinner=False)
@@ -150,8 +155,11 @@ with st.sidebar:
 # --- 8. LOGIQUE PRINCIPALE ---
 
 # MODE QUIZ
+# MODE QUIZ
 if st.session_state.mode == "quiz":
     st.markdown("### 📝 Test d'Orientation (15 Questions)")
+    
+    # 1. LE FORMULAIRE
     with st.form("quiz_15"):
         col_q1, col_q2 = st.columns(2)
         with col_q1:
@@ -176,169 +184,85 @@ if st.session_state.mode == "quiz":
             q14 = st.select_slider("14. Priorité ?", ["Passion", "Mix", "Argent"])
             q15 = st.text_input("15. Métier rêve ?", placeholder="Ex: Data Scientist...")
 
+        # Bouton "Analyser" DANS le formulaire
         if st.form_submit_button("Analyser"):
             with st.spinner("Analyse croisée de tes 15 réponses..."):
-                # 1. Récupération du contexte (Base de données)
+                # A. Contexte
                 retriever = vectorstore.as_retriever()
                 docs = retriever.invoke("Détails modules débouchés filières")
                 context = "\n".join([d.page_content for d in docs])
                 
-                # 2. Résumé structuré des 15 réponses (CRUCIAL pour la précision)
+                # B. Résumé
                 summary = f"""
-                PROFIL CANDIDAT :
-                - Passion dominante : {q1}
-                - Niveau Maths : {q2} | Code : {q6} | IA : {q7}
-                - Préférences Terrain/Bureau : {q3} | Social : {q4} | Stress : {q5}
-                - Intérêts Tech : Télécoms ({q8})
-                - Intérêts Indus : Méca ({q9}), Élec ({q10}), Logistique ({q11}), Chimie/Env ({q12}), BTP ({q13})
-                - Priorité vie : {q14}
-                - Rêve : {q15}
+                PROFIL: Passion={q1}, Maths={q2}, Code={q6}, IA={q7}, 
+                Lieu={q3}, Social={q4}, Stress={q5}, Télécoms={q8},
+                Méca={q9}, Élec={q10}, Logistique={q11}, Chimie={q12}, BTP={q13},
+                Priorité={q14}, Rêve={q15}
                 """
                 
-                # 3. LE PROMPT "EXPERT"
+                # C. Prompt
                 prompt = f"""
                 Tu es un Expert en Orientation Stratégique à l'ENSA Tanger.
-                
-                TES OUTILS :
-                {CONSTANTE_FILIERES}
-                
-                DONNÉES DU CANDIDAT :
-                {summary}
+                TES OUTILS : {CONSTANTE_FILIERES}
+                DONNÉES CANDIDAT : {summary}
                 
                 TA MISSION (Analyse Algorithmique) :
-                N'invente rien. Base-toi sur la logique suivante pour déterminer le TOP 1 et le TOP 2 :
-                
                 1. LOGIQUE D'ÉLIMINATION :
-                   - Si "Code" = "Je déteste" -> INTERDIRE GINF et CSI.
-                   - Si "Maths" = "Faible" -> ÉVITER GINF, CSI, GSEA.
-                   - Si "Chimie" = "Non" -> ÉVITER G2EI.
+                   - Code="Je déteste" -> INTERDIRE GINF/CSI.
+                   - Maths="Faible" -> ÉVITER GINF/CSI/GSEA.
+                   - Chimie="Non" -> ÉVITER G2EI.
                 
-                2. LOGIQUE DE MATCHING (Score Mental) :
-                   - GINF : Score élevé si Code="J'adore" + Maths > Moyen.
-                   - GIND : Score élevé si Logistique="Top" OU Méca="Fascinant" + Gestion.
-                   - GSEA : Score élevé si Élec="Top" + Physique/Auto.
-                   - GSR : Score élevé si Télécoms="Passion" + Réseaux.
-                   - G2EI : Score élevé si Chimie/Env="Oui" + Énergie.
-                   - CSI : Score élevé si IA="Passion" + Code="J'adore" + Curiosité Cyber.
+                2. MATCHING :
+                   - GINF : Code="J'adore" + Maths fort.
+                   - GIND : Logistique/Méca + Gestion.
+                   - GSEA : Élec + Auto.
+                   - GSR : Télécoms + Réseaux.
+                   - G2EI : Chimie/Env + Énergie.
+                   - CSI : IA + Code + Cyber.
                 
-                FORMAT DE RÉPONSE ATTENDU (Markdown) :
-                
-                ## 🏆 Ta Filière Idéale : [Nom de la filière]
-                **Pourquoi c'est le match parfait :**
-                Explique en 2 phrases en liant ses réponses (ex: "Tu aimes X et Y, or cette filière contient le module Z...").
-                
-                ## 🥈 Alternative Crédible : [Nom de la 2ème filière]
-                Pourquoi celle-ci pourrait aussi te plaire (plan B).
-                
-                ## ⚠️ Point de Vigilance
-                Identifie une faiblesse dans son profil par rapport à son choix (ex: "Attention, tu dis être faible en Maths, il faudra bosser l'analyse...").
-                
-                ## 🔮 Projection Métier
-                Un exemple de métier concret adapté à son rêve "{q15}".
+                FORMAT REPONSE (Markdown) :
+                ## 🏆 Ta Filière Idéale : [Nom]
+                **Pourquoi :** Explication liée aux réponses.
+                ## 🥈 Alternative : [Nom]
+                Plan B crédible.
+                ## ⚠️ Vigilance
+                Point faible à surveiller.
+                ## 🔮 Projection
+                Métier lié à "{q15}".
                 """
                 
-                # 4. Appel IA avec température basse (0.4) pour rester logique mais fluide
+                # D. Appel IA
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile", temperature=0.4)
                 resp = llm.invoke(prompt)
                 
-                # 5. Sauvegarde et PDF
-                st.session_state.messages.append({"role": "assistant", "content": f"**Résultat de l'Analyse :**\n\n{resp.content}"})
+                # E. SAUVEGARDE SPÉCIFIQUE (La correction est ici)
+                # On sauvegarde le résultat DANS la variable dédiée au Quiz
+                st.session_state.quiz_result = resp.content
                 
-                # Génération du PDF
-                pdf_bytes = create_pdf(f"Réponses clés Quiz: {q1}, {q2}, {q6}, {q15}", resp.content)
+                # On l'ajoute aussi à l'historique global pour le Chat (optionnel)
+                st.session_state.messages.append({"role": "assistant", "content": f"**Résultat Quiz :**\n\n{resp.content}"})
+                
+                # F. Génération PDF
+                pdf_bytes = create_pdf(f"Réponses clés Quiz: {summary}", resp.content)
                 st.session_state.last_pdf = pdf_bytes
+                
                 st.rerun()
 
-    # Affichage du résultat et du bouton de téléchargement (hors du formulaire)
-    if st.session_state.messages and "Résultat Quiz" in st.session_state.messages[-1]["content"]:
-        st.success("Analyse terminée !")
-        st.markdown(st.session_state.messages[-1]["content"])
+    # 2. AFFICHAGE DU RÉSULTAT (HORS DU FORMULAIRE)
+    # On vérifie la variable dédiée 'quiz_result' au lieu de chercher dans les messages
+    if st.session_state.quiz_result:
+        st.divider()
+        st.success("✅ Analyse terminée avec succès !")
         
+        # Affichage du texte
+        st.markdown(st.session_state.quiz_result)
+        
+        # Affichage du bouton PDF
         if st.session_state.last_pdf:
             st.download_button(
                 label="📄 Télécharger mon Rapport d'Orientation (PDF)",
                 data=st.session_state.last_pdf,
                 file_name="rapport_orientation_ensa.pdf",
-                mime="application/pdf"
-            )
-
-# MODE ANALYSEUR NOTES
-
-elif st.session_state.mode == "grades":
-    st.markdown("### 📊 Analyseur Notes")
-    
-    # Début du formulaire
-    with st.form("grades"):
-        c1, c2 = st.columns(2)
-        with c1:
-            m = st.number_input("Maths", 0., 20., 12.)
-            p = st.number_input("Physique", 0., 20., 12.)
-        with c2:
-            i = st.number_input("Info", 0., 20., 12.)
-            l = st.number_input("Langues", 0., 20., 12.)
-        ch = st.slider("Chimie", 0, 20, 10)
-        
-        # IMPORTANT : Ce 'if' doit être aligné SOUS les variables m, p, i...
-        # Il doit être à l'intérieur du 'with st.form'
-        if st.form_submit_button("Calculer"):
-            with st.spinner("Analyse approfondie de tes résultats..."):
-                # On prépare le contexte
-                retriever = vectorstore.as_retriever()
-                # Recherche plus ciblée
-                docs = retriever.invoke("Prérequis filières matières") 
-                ctx = "\n".join([d.page_content for d in docs])
-                
-                summary = f"Mathématiques: {m}/20, Physique: {p}/20, Informatique: {i}/20, Langues: {l}/20, Chimie: {ch}/20"
-                
-                # --- PROMPT AMÉLIORÉ ---
-                prompt = f"""
-                Tu es le Directeur Pédagogique de l'ENSA Tanger. Tu analyses le dossier d'un étudiant pour l'orienter.
-                
-                DONNÉES ÉTUDIANT :
-                {summary}
-                
-                CONTEXTE FILIÈRES :
-                {CONSTANTE_FILIERES}
-                
-                TA MISSION :
-                1. Calcule un "Score d'Affinité" (0-100%) pour chaque filière en suivant cette PONDÉRATION LOGIQUE :
-                   - GINF & CSI : Coefficient double sur (Maths + Info). Si Info < 12, pénalité forte.
-                   - GSEA & G2EI : Coefficient double sur (Physique + Maths).
-                   - GIND : Moyenne équilibrée, bonus si Maths & Langues sont solides.
-                   - GSR : Mix équilibré Info + Réseaux (considère Info et Maths).
-                
-                2. Génère un tableau Markdown strict avec les colonnes :
-                   | Filière | Score % | Verdict | Conseil Rapide |
-                
-                3. Ajoute une courte analyse textuelle (3 phrases max) sous le tableau pour résumer ses forces et faiblesses.
-                
-                Sois strict mais encourageant. Si une note est critique (ex: <10), signale-le.
-                """
-                
-                # Appel à l'IA avec une température basse pour être plus "rigoureux"
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile", temperature=0.3)
-                resp = llm.invoke(prompt)
-                
-                # Sauvegarde du message
-                st.session_state.messages.append({"role": "assistant", "content": resp.content})
-                
-                # Génération PDF
-                pdf_bytes = create_pdf(f"Relevé de notes: {summary}", resp.content)
-                st.session_state.last_pdf = pdf_bytes
-                st.rerun()
-
-    # --- AFFICHAGE DES RÉSULTATS (HORS DU FORMULAIRE) ---
-    # Ici, on reprend l'alignement principal (au niveau du 'with st.form')
-    
-    # Correction du bug précédent (parenthèses ajoutées)
-    if st.session_state.messages and ("Tableau" in str(st.session_state.messages[-1]["content"]) or "Analyse" in str(st.session_state.messages[-1]["content"])):
-        st.markdown(st.session_state.messages[-1]["content"])
-        
-        if st.session_state.last_pdf:
-            st.download_button(
-                label="📄 Télécharger mon Bilan de Notes (PDF)",
-                data=st.session_state.last_pdf,
-                file_name="bilan_notes_ensa.pdf",
                 mime="application/pdf"
             )
 
@@ -375,6 +299,7 @@ elif st.session_state.mode == "chat":
             resp = llm.invoke(prompt)
             st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
+
 
 
 
