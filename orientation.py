@@ -236,23 +236,45 @@ elif st.session_state.mode == "grades":
             l = st.number_input("Langues", 0., 20., 12.)
         ch = st.slider("Chimie", 0, 20, 10)
         
-        if st.form_submit_button("Calculer"):
-            with st.spinner("Calcul..."):
+       if st.form_submit_button("Calculer"):
+            with st.spinner("Analyse approfondie de tes résultats..."):
+                # On prépare le contexte
                 retriever = vectorstore.as_retriever()
-                docs = retriever.invoke("Filières")
+                docs = retriever.invoke("Prérequis filières matières") # Recherche plus ciblée
                 ctx = "\n".join([d.page_content for d in docs])
-                summary = f"Maths:{m}, Phys:{p}, Info:{i}, Chimie:{ch}"
                 
+                summary = f"Mathématiques: {m}/20, Physique: {p}/20, Informatique: {i}/20, Langues: {l}/20, Chimie: {ch}/20"
+                
+                # --- PROMPT AMÉLIORÉ ---
                 prompt = f"""
-                Analyste ENSA. {CONSTANTE_FILIERES}.
-                Notes: {summary}.
-                Calcule score compatibilité % par filière.
-                Règle: Si Info < 12, Score GINF/CSI < 50%.
-                Tableau Markdown.
+                Tu es le Directeur Pédagogique de l'ENSA Tanger. Tu analyses le dossier d'un étudiant pour l'orienter.
+                
+                DONNÉES ÉTUDIANT :
+                {summary}
+                
+                CONTEXTE FILIÈRES :
+                {CONSTANTE_FILIERES}
+                
+                TA MISSION :
+                1. Calcule un "Score d'Affinité" (0-100%) pour chaque filière en suivant cette PONDÉRATION LOGIQUE :
+                   - GINF & CSI : Coefficient double sur (Maths + Info). Si Info < 12, pénalité forte.
+                   - GSEA & G2EI : Coefficient double sur (Physique + Maths).
+                   - GIND : Moyenne équilibrée, bonus si Maths & Langues sont solides.
+                   - GSR : Mix équilibré Info + Réseaux (considère Info et Maths).
+                
+                2. Génère un tableau Markdown strict avec les colonnes :
+                   | Filière | Score % | Verdict | Conseil Rapide |
+                
+                3. Ajoute une courte analyse textuelle (3 phrases max) sous le tableau pour résumer ses forces et faiblesses.
+                
+                Sois strict mais encourageant. Si une note est critique (ex: <10), signale-le.
                 """
-                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+                
+                # Appel à l'IA avec une température basse pour être plus "rigoureux"
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile", temperature=0.3)
                 resp = llm.invoke(prompt)
                 
+                # Sauvegarde
                 st.session_state.messages.append({"role": "assistant", "content": resp.content})
                 
                 # Génération PDF
@@ -305,4 +327,5 @@ elif st.session_state.mode == "chat":
             resp = llm.invoke(prompt)
             st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
+
 
