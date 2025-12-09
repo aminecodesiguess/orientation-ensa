@@ -16,9 +16,13 @@ except:
 
 st.set_page_config(page_title="Orientation ENSA Tanger", page_icon="🎓", layout="wide")
 
-# --- 2. LISTE OFFICIELLE (VÉRITÉ ABSOLUE) ---
+# --- 2. MODÈLE SÉCURISÉ (ANTI-PLANTAGE) ---
+# On utilise la version 8b car elle est très rapide et ne bloque jamais en démo.
+MODEL_NAME = "llama3-8b-8192"
+
+# --- 3. LISTE OFFICIELLE ---
 CONSTANTE_FILIERES = """
-LISTE OFFICIELLE DES 6 FILIÈRES DE L'ENSA TANGER (Cycle Ingénieur) :
+LISTE OFFICIELLE DES 6 FILIÈRES DE L'ENSA TANGER :
 1. Génie Systèmes et Réseaux (GSR)
 2. Génie Informatique (GINF)
 3. Génie Industriel (GIND)
@@ -27,7 +31,7 @@ LISTE OFFICIELLE DES 6 FILIÈRES DE L'ENSA TANGER (Cycle Ingénieur) :
 6. Cybersecurity and Cyberintelligence (CSI)
 """
 
-# --- 3. FONCTION GÉNÉRATION PDF (ROBUSTE) ---
+# --- 4. FONCTION PDF ---
 def create_pdf(user_profile, ai_response):
     class PDF(FPDF):
         def header(self):
@@ -46,7 +50,6 @@ def create_pdf(user_profile, ai_response):
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     
-    # Nettoyage des caractères spéciaux pour éviter le crash PDF
     def clean(text):
         return text.encode('latin-1', 'replace').decode('latin-1')
 
@@ -63,26 +66,22 @@ def create_pdf(user_profile, ai_response):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 4. CHARGEMENT DONNÉES (OPTIMISÉ) ---
+# --- 5. CHARGEMENT DONNÉES ---
 @st.cache_resource(show_spinner=False)
 def initialize_vectorstore():
     folder_path = "data"
     all_docs = []
     
-    if not os.path.exists(folder_path):
-        return None, "Dossier 'data' introuvable."
+    if not os.path.exists(folder_path): return None, "Dossier 'data' introuvable."
     
     files = [f for f in os.listdir(folder_path) if f.endswith('.pdf') or f.endswith('.txt')]
-    if not files:
-        return None, "Aucun fichier (PDF/TXT) trouvé dans 'data'."
+    if not files: return None, "Aucun fichier trouvé."
 
     try:
         for filename in files:
             file_path = os.path.join(folder_path, filename)
-            if filename.endswith('.pdf'):
-                loader = PyPDFLoader(file_path)
-            elif filename.endswith('.txt'):
-                loader = TextLoader(file_path, encoding='utf-8')
+            if filename.endswith('.pdf'): loader = PyPDFLoader(file_path)
+            else: loader = TextLoader(file_path, encoding='utf-8')
             all_docs.extend(loader.load())
             
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
@@ -92,31 +91,25 @@ def initialize_vectorstore():
     except Exception as e:
         return None, str(e)
 
-# --- 5. INITIALISATION INTERFACE ---
+# --- 6. INTERFACE ---
 col1, col2 = st.columns([1, 4])
 with col1:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", width=100)
-    else:
-        st.markdown("# 🏫")
+    if os.path.exists("logo.png"): st.image("logo.png", width=100)
+    else: st.markdown("# 🏫")
 with col2:
     st.title("Assistant Orientation ENSAT")
     st.markdown("**National School of Applied Sciences of Tangier**")
 st.divider()
 
-# Initialisation Session State
 if "messages" not in st.session_state: st.session_state.messages = []
 if "mode" not in st.session_state: st.session_state.mode = "chat"
 if "last_pdf" not in st.session_state: st.session_state.last_pdf = None
 
-# Chargement silencieux
-with st.spinner("Chargement du cerveau de l'IA..."):
+with st.spinner("Chargement..."):
     vectorstore, err = initialize_vectorstore()
-    if err:
-        st.error(err)
-        st.stop()
+    if err: st.error(err)
 
-# --- 6. BARRE LATÉRALE ---
+# --- 7. MENU ---
 with st.sidebar:
     st.header("🎯 Menu")
     if st.button("💬 Chat IA", use_container_width=True): st.session_state.mode = "chat"
@@ -124,17 +117,14 @@ with st.sidebar:
     if st.button("📝 Test (15 Q)", use_container_width=True): st.session_state.mode = "quiz"
     if st.button("⚖️ Comparateur", use_container_width=True): st.session_state.mode = "compare"
     st.divider()
-    if st.button("🗑️ Reset Tout"):
+    if st.button("🗑️ Reset"):
         st.session_state.messages = []
         st.session_state.last_pdf = None
         st.rerun()
 
-# --- 7. LOGIQUE PRINCIPALE ---
+# --- 8. LOGIQUE PRINCIPALE ---
 
-# MODELE UTILISÉ : Llama 3 8b (Rapide & Stable pour démo)
-MODEL_NAME = "llama3-8b-8192"
-
-# === MODE QUIZ ===
+# MODE QUIZ
 if st.session_state.mode == "quiz":
     st.markdown("### 📝 Test d'Orientation (15 Questions)")
     with st.form("quiz_form"):
@@ -162,7 +152,7 @@ if st.session_state.mode == "quiz":
             q15 = st.text_input("15. Métier rêve ?", placeholder="Ex: Data Scientist")
 
         if st.form_submit_button("🎓 Analyser"):
-            with st.spinner("Analyse en cours..."):
+            with st.spinner("Analyse..."):
                 retriever = vectorstore.as_retriever()
                 ctx = "\n".join([d.page_content for d in retriever.invoke("Filières")])
                 summ = f"Goût:{q1}, Maths:{q2}, Code:{q6}, Méca:{q9}, Elec:{q10}, Chimie:{q12}, BTP:{q13}"
@@ -175,7 +165,7 @@ if st.session_state.mode == "quiz":
                 - Aime Méca -> GIND.
                 - Aime Chimie -> G2EI.
                 - Aime Elec -> GSEA.
-                Réponds naturellement (Intro, Filière, Pourquoi). Contexte: {ctx}
+                Réponds naturellement. Contexte: {ctx}
                 """
                 
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name=MODEL_NAME)
@@ -186,12 +176,12 @@ if st.session_state.mode == "quiz":
                 st.rerun()
 
     if st.session_state.messages and "Résultat" in str(st.session_state.messages[-1].get("content", "")):
-        st.success("Analyse terminée !")
+        st.success("Terminé !")
         st.markdown(st.session_state.messages[-1]["content"])
         if st.session_state.last_pdf:
-            st.download_button("📄 Télécharger Rapport PDF", st.session_state.last_pdf, "rapport_ensa.pdf", "application/pdf")
+            st.download_button("📄 Télécharger Rapport PDF", st.session_state.last_pdf, "rapport.pdf", "application/pdf")
 
-# === MODE NOTES ===
+# MODE NOTES
 elif st.session_state.mode == "grades":
     st.markdown("### 📊 Analyseur Notes")
     with st.form("grades"):
@@ -210,11 +200,7 @@ elif st.session_state.mode == "grades":
                 ctx = "\n".join([d.page_content for d in retriever.invoke("Filières")])
                 summ = f"M:{m}, P:{p}, I:{i}, Ch:{ch}"
                 
-                prompt = f"""
-                Analyste ENSA. {CONSTANTE_FILIERES}.
-                Notes: {summ}.
-                Donne un Tableau Markdown de compatibilité % pour chaque filière.
-                """
+                prompt = f"Analyste ENSA. {CONSTANTE_FILIERES}. Notes: {summ}. Tableau Markdown compatibilité %."
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name=MODEL_NAME)
                 resp = llm.invoke(prompt)
                 
@@ -225,9 +211,9 @@ elif st.session_state.mode == "grades":
     if st.session_state.messages and ("Tableau" in str(st.session_state.messages[-1].get("content", "")) or "Analyse" in str(st.session_state.messages[-1].get("content", ""))):
         st.markdown(st.session_state.messages[-1]["content"])
         if st.session_state.last_pdf:
-            st.download_button("📄 Télécharger Bilan PDF", st.session_state.last_pdf, "bilan_notes.pdf", "application/pdf")
+            st.download_button("📄 Télécharger Bilan PDF", st.session_state.last_pdf, "bilan.pdf", "application/pdf")
 
-# === MODE COMPARE ===
+# MODE COMPARE
 elif st.session_state.mode == "compare":
     st.markdown("### ⚖️ Comparateur")
     c1, c2 = st.columns(2)
@@ -243,7 +229,7 @@ elif st.session_state.mode == "compare":
             st.markdown(resp.content)
             st.session_state.messages.append({"role": "assistant", "content": resp.content})
 
-# === MODE CHAT ===
+# MODE CHAT
 elif st.session_state.mode == "chat":
     for m in st.session_state.messages:
         with st.chat_message(m["role"]): st.markdown(m["content"])
