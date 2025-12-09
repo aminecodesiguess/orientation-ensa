@@ -224,8 +224,11 @@ if st.session_state.mode == "quiz":
             )
 
 # MODE ANALYSEUR NOTES
+
 elif st.session_state.mode == "grades":
     st.markdown("### 📊 Analyseur Notes")
+    
+    # Début du formulaire
     with st.form("grades"):
         c1, c2 = st.columns(2)
         with c1:
@@ -236,11 +239,14 @@ elif st.session_state.mode == "grades":
             l = st.number_input("Langues", 0., 20., 12.)
         ch = st.slider("Chimie", 0, 20, 10)
         
-       if st.form_submit_button("Calculer"):
+        # IMPORTANT : Ce 'if' doit être aligné SOUS les variables m, p, i...
+        # Il doit être à l'intérieur du 'with st.form'
+        if st.form_submit_button("Calculer"):
             with st.spinner("Analyse approfondie de tes résultats..."):
                 # On prépare le contexte
                 retriever = vectorstore.as_retriever()
-                docs = retriever.invoke("Prérequis filières matières") # Recherche plus ciblée
+                # Recherche plus ciblée
+                docs = retriever.invoke("Prérequis filières matières") 
                 ctx = "\n".join([d.page_content for d in docs])
                 
                 summary = f"Mathématiques: {m}/20, Physique: {p}/20, Informatique: {i}/20, Langues: {l}/20, Chimie: {ch}/20"
@@ -274,7 +280,7 @@ elif st.session_state.mode == "grades":
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile", temperature=0.3)
                 resp = llm.invoke(prompt)
                 
-                # Sauvegarde
+                # Sauvegarde du message
                 st.session_state.messages.append({"role": "assistant", "content": resp.content})
                 
                 # Génération PDF
@@ -282,16 +288,19 @@ elif st.session_state.mode == "grades":
                 st.session_state.last_pdf = pdf_bytes
                 st.rerun()
 
-    # Remplace la ligne qui plante par celle-ci (avec les parenthèses ajoutées) :
+    # --- AFFICHAGE DES RÉSULTATS (HORS DU FORMULAIRE) ---
+    # Ici, on reprend l'alignement principal (au niveau du 'with st.form')
+    
+    # Correction du bug précédent (parenthèses ajoutées)
     if st.session_state.messages and ("Tableau" in str(st.session_state.messages[-1]["content"]) or "Analyse" in str(st.session_state.messages[-1]["content"])):
         st.markdown(st.session_state.messages[-1]["content"])
+        
         if st.session_state.last_pdf:
             st.download_button(
                 label="📄 Télécharger mon Bilan de Notes (PDF)",
                 data=st.session_state.last_pdf,
                 file_name="bilan_notes_ensa.pdf",
                 mime="application/pdf"
-    
             )
 
 # MODE COMPARE
@@ -327,5 +336,6 @@ elif st.session_state.mode == "chat":
             resp = llm.invoke(prompt)
             st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
+
 
 
