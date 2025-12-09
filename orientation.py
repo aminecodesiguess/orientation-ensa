@@ -5,7 +5,7 @@ from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from fpdf import FPDF # <-- NOUVEL IMPORT POUR LE PDF
+from fpdf import FPDF
 
 # --- 1. LISTE OFFICIELLE DES FILIÈRES ---
 CONSTANTE_FILIERES = """
@@ -27,18 +27,16 @@ except:
 
 st.set_page_config(page_title="Orientation ENSA Tanger", page_icon="🎓", layout="wide")
 
-# --- 3. FONCTION DE GÉNÉRATION PDF (NOUVEAU) ---
+# --- 3. FONCTION DE GÉNÉRATION PDF ---
 def create_pdf(user_profile, ai_response):
     class PDF(FPDF):
         def header(self):
-            # Logo
             if os.path.exists("logo.png"):
                 self.image("logo.png", 10, 8, 25)
-            # Titre
             self.set_font('Arial', 'B', 15)
-            self.cell(80) # Décalage à droite
+            self.cell(80)
             self.cell(30, 10, "Rapport d'Orientation - ENSA Tanger", 0, 0, 'C')
-            self.ln(30) # Saut de ligne
+            self.ln(30)
 
         def footer(self):
             self.set_y(-15)
@@ -49,7 +47,6 @@ def create_pdf(user_profile, ai_response):
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     
-    # Nettoyage basique des caractères non supportés par FPDF standard (Emojis, etc.)
     def clean_text(text):
         return text.encode('latin-1', 'replace').decode('latin-1')
 
@@ -86,8 +83,7 @@ with col2:
 
 st.divider()
 
-# --- 5. STATE ---
-# --- 5. STATE ---
+# --- 5. STATE (GESTION DE LA MÉMOIRE) ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "mode" not in st.session_state:
@@ -95,10 +91,11 @@ if "mode" not in st.session_state:
 if "last_pdf" not in st.session_state:
     st.session_state.last_pdf = None
 
-# --- AJOUT CRUCIAL ICI ---
-# On crée une mémoire spécifique pour le résultat du Quiz
+# Variables spécifiques pour stocker les résultats et éviter l'écran blanc
 if "quiz_result" not in st.session_state:
     st.session_state.quiz_result = None
+if "grades_result" not in st.session_state:
+    st.session_state.grades_result = None
 
 # --- 6. DATA LOADING ---
 @st.cache_resource(show_spinner=False)
@@ -149,17 +146,16 @@ with st.sidebar:
     st.divider()
     if st.button("🗑️ Reset"):
         st.session_state.messages = []
+        st.session_state.quiz_result = None
+        st.session_state.grades_result = None
         st.session_state.last_pdf = None
         st.rerun()
 
 # --- 8. LOGIQUE PRINCIPALE ---
 
 # MODE QUIZ
-# MODE QUIZ
 if st.session_state.mode == "quiz":
     st.markdown("### 📝 Test d'Orientation (15 Questions)")
-    
-    # 1. LE FORMULAIRE
     with st.form("quiz_15"):
         col_q1, col_q2 = st.columns(2)
         with col_q1:
@@ -184,15 +180,12 @@ if st.session_state.mode == "quiz":
             q14 = st.select_slider("14. Priorité ?", ["Passion", "Mix", "Argent"])
             q15 = st.text_input("15. Métier rêve ?", placeholder="Ex: Data Scientist...")
 
-        # Bouton "Analyser" DANS le formulaire
         if st.form_submit_button("Analyser"):
             with st.spinner("Analyse croisée de tes 15 réponses..."):
-                # A. Contexte
                 retriever = vectorstore.as_retriever()
                 docs = retriever.invoke("Détails modules débouchés filières")
                 context = "\n".join([d.page_content for d in docs])
                 
-                # B. Résumé
                 summary = f"""
                 PROFIL: Passion={q1}, Maths={q2}, Code={q6}, IA={q7}, 
                 Lieu={q3}, Social={q4}, Stress={q5}, Télécoms={q8},
@@ -200,7 +193,6 @@ if st.session_state.mode == "quiz":
                 Priorité={q14}, Rêve={q15}
                 """
                 
-                # C. Prompt
                 prompt = f"""
                 Tu es un Expert en Orientation Stratégique à l'ENSA Tanger.
                 TES OUTILS : {CONSTANTE_FILIERES}
@@ -231,40 +223,85 @@ if st.session_state.mode == "quiz":
                 Métier lié à "{q15}".
                 """
                 
-                # D. Appel IA
                 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile", temperature=0.4)
                 resp = llm.invoke(prompt)
                 
-                # E. SAUVEGARDE SPÉCIFIQUE (La correction est ici)
-                # On sauvegarde le résultat DANS la variable dédiée au Quiz
+                # Sauvegarde stable
                 st.session_state.quiz_result = resp.content
-                
-                # On l'ajoute aussi à l'historique global pour le Chat (optionnel)
                 st.session_state.messages.append({"role": "assistant", "content": f"**Résultat Quiz :**\n\n{resp.content}"})
                 
-                # F. Génération PDF
                 pdf_bytes = create_pdf(f"Réponses clés Quiz: {summary}", resp.content)
                 st.session_state.last_pdf = pdf_bytes
                 
                 st.rerun()
 
-    # 2. AFFICHAGE DU RÉSULTAT (HORS DU FORMULAIRE)
-    # On vérifie la variable dédiée 'quiz_result' au lieu de chercher dans les messages
+    # Affichage résultat Quiz (Stable)
     if st.session_state.quiz_result:
         st.divider()
         st.success("✅ Analyse terminée avec succès !")
-        
-        # Affichage du texte
         st.markdown(st.session_state.quiz_result)
-        
-        # Affichage du bouton PDF
         if st.session_state.last_pdf:
-            st.download_button(
-                label="📄 Télécharger mon Rapport d'Orientation (PDF)",
-                data=st.session_state.last_pdf,
-                file_name="rapport_orientation_ensa.pdf",
-                mime="application/pdf"
-            )
+            st.download_button("📄 Télécharger mon Rapport (PDF)", st.session_state.last_pdf, "rapport_orientation_ensa.pdf", "application/pdf")
+
+# MODE ANALYSEUR NOTES
+elif st.session_state.mode == "grades":
+    st.markdown("### 📊 Analyseur Notes")
+    
+    with st.form("grades"):
+        c1, c2 = st.columns(2)
+        with c1:
+            m = st.number_input("Maths", 0., 20., 12.)
+            p = st.number_input("Physique", 0., 20., 12.)
+        with c2:
+            i = st.number_input("Info", 0., 20., 12.)
+            l = st.number_input("Langues", 0., 20., 12.)
+        ch = st.slider("Chimie", 0, 20, 10)
+        
+        if st.form_submit_button("Calculer"):
+            with st.spinner("Analyse approfondie de tes résultats..."):
+                retriever = vectorstore.as_retriever()
+                docs = retriever.invoke("Prérequis filières matières")
+                ctx = "\n".join([d.page_content for d in docs])
+                
+                summary = f"Mathématiques: {m}/20, Physique: {p}/20, Informatique: {i}/20, Langues: {l}/20, Chimie: {ch}/20"
+                
+                prompt = f"""
+                Tu es le Directeur Pédagogique de l'ENSA Tanger. Tu analyses le dossier d'un étudiant pour l'orienter.
+                DONNÉES ÉTUDIANT : {summary}
+                CONTEXTE FILIÈRES : {CONSTANTE_FILIERES}
+                
+                TA MISSION :
+                1. Calcule un "Score d'Affinité" (0-100%) pour chaque filière en suivant cette PONDÉRATION LOGIQUE :
+                   - GINF & CSI : Coefficient double sur (Maths + Info). Si Info < 12, pénalité forte.
+                   - GSEA & G2EI : Coefficient double sur (Physique + Maths).
+                   - GIND : Moyenne équilibrée, bonus si Maths & Langues sont solides.
+                   - GSR : Mix équilibré Info + Réseaux (considère Info et Maths).
+                
+                2. Génère un tableau Markdown strict avec les colonnes :
+                   | Filière | Score % | Verdict | Conseil Rapide |
+                
+                3. Ajoute une courte analyse textuelle (3 phrases max) sous le tableau pour résumer ses forces et faiblesses.
+                Sois strict mais encourageant.
+                """
+                
+                llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile", temperature=0.3)
+                resp = llm.invoke(prompt)
+                
+                # Sauvegarde stable pour les notes
+                st.session_state.grades_result = resp.content
+                st.session_state.messages.append({"role": "assistant", "content": resp.content})
+                
+                pdf_bytes = create_pdf(f"Relevé de notes: {summary}", resp.content)
+                st.session_state.last_pdf = pdf_bytes
+                st.rerun()
+
+    # Affichage résultat Notes (Stable)
+    if st.session_state.grades_result:
+        st.divider()
+        st.success("✅ Analyse des notes terminée !")
+        st.markdown(st.session_state.grades_result)
+        if st.session_state.last_pdf:
+            st.download_button("📄 Télécharger mon Bilan (PDF)", st.session_state.last_pdf, "bilan_notes_ensa.pdf", "application/pdf")
 
 # MODE COMPARE
 elif st.session_state.mode == "compare":
@@ -273,7 +310,7 @@ elif st.session_state.mode == "compare":
     f1 = c1.text_input("Filière 1", "GINF")
     f2 = c2.text_input("Filière 2", "GIND")
     if st.button("Comparer"):
-        with st.spinner("..."):
+        with st.spinner("Comparaison en cours..."):
             retriever = vectorstore.as_retriever()
             docs = retriever.invoke(f"{f1} {f2}")
             ctx = "\n".join([d.page_content for d in docs])
@@ -299,8 +336,3 @@ elif st.session_state.mode == "chat":
             resp = llm.invoke(prompt)
             st.markdown(resp.content)
         st.session_state.messages.append({"role": "assistant", "content": resp.content})
-
-
-
-
-
